@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+phobos-lite/node_modules/
+
+# Build output
+dist/
+phobos-lite/dist/
+
+# Downloaded game files
+*.zip
+version.txt
+phobos-provider.json
+Primal Online/
+
+# PHOBOS-Lite runtime
+phobos-lite/models/
+phobos-lite/phobos.log
+phobos-lite/phobos-lite.exe
+phobos-lite/phobos-lite
+phobos-lite/llama-server.exe
+phobos-lite/llama-server
+
+# Electron builder cache
+.cache/
+builder-debug.yml
+builder-effective-config.yaml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.suo
+*.user
