@@ -1,24 +1,20 @@
-// preload.js — contextBridge between renderer (index.html) and main process
-// Runs with Node access but exposes only a narrow typed API to the renderer.
-
 'use strict';
 
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('launcher', {
-  // Kick off the full sequence: check → download game → download AI → start AI → ready
-  start: () => ipcRenderer.invoke('launcher:start'),
+  selectChannel: (channelId) => ipcRenderer.invoke('launcher:selectChannel', channelId),
+  launch:        ()           => ipcRenderer.invoke('game:launch'),
+  retry:         ()           => ipcRenderer.invoke('launcher:retry'),
+  enableAI:      ()           => ipcRenderer.invoke('launcher:enableAI'),
+  getAISupported: ()          => ipcRenderer.invoke('launcher:aiSupported'),
+  close:         ()           => ipcRenderer.invoke('window:close'),
+  minimize:      ()           => ipcRenderer.invoke('window:minimize'),
+  openUrl:       (url)        => ipcRenderer.invoke('shell:openUrl', url),
 
-  // Launch the game executable, then close the launcher
-  launch: () => ipcRenderer.invoke('game:launch'),
-
-  // Frameless window controls
-  close:    () => ipcRenderer.invoke('window:close'),
-  minimize: () => ipcRenderer.invoke('window:minimize'),
-
-  // Push events from main → renderer
-  // { phase, message, progress? }
-  onStatus:  (cb) => ipcRenderer.on('status',   (_, p) => cb(p)),
-  // { model } — fired when PHOBOS-Lite is up and healthy
-  onAIReady: (cb) => ipcRenderer.on('ai-ready', (_, p) => cb(p)),
+  onStatus:       (cb) => ipcRenderer.on('status',       (_, p) => cb(p)),
+  onAnnouncement: (cb) => ipcRenderer.on('announcement', (_, p) => cb(p)),
+  onVersion:      (cb) => ipcRenderer.on('version',      (_, p) => cb(p)),
+  onAIReady:      (cb) => ipcRenderer.on('ai-ready',     (_, p) => cb(p)),
+  onAIStatus:     (cb) => ipcRenderer.on('ai-status',    (_, p) => cb(p)),
 });

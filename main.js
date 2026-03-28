@@ -1,5 +1,4 @@
 // main.js — Electron main process
-// Owns: window lifecycle, game update pipeline, PHOBOS-Lite child process
 
 'use strict';
 
@@ -9,16 +8,15 @@ const fs     = require('fs');
 const https  = require('https');
 const http   = require('http');
 const os     = require('os');
-const { spawn, execFile } = require('child_process');
-const { pipeline } = require('stream/promises');
+const { spawn } = require('child_process');
 const AdmZip = require('adm-zip');
 
 const cfg = require('./config');
 
 // ─── Globals ──────────────────────────────────────────────────────────────────
-let mainWindow = null;
-let phobosProc = null;   // PHOBOS-Lite child process handle
-let phobosHealthTimer = null;
+let mainWindow  = null;
+let phobosProc  = null;
+let activeChannel = null;   // set once user picks stable/experimental
 
 const isDev = process.argv.includes('--dev');
 
@@ -28,21 +26,16 @@ function createWindow() {
     width: 1280,
     height: 720,
     resizable: false,
-    frame: false,           // frameless — renderer draws its own chrome
-    transparent: false,
+    frame: false,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),  // flat layout — preload.js is at root
+      preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
 
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
-
-  if (isDev) {
-    mainWindow.webContents.openDevTools({ mode: 'detach' });
-  }
-
+  if (isDev) mainWindow.webContents.openDevTools({ mode: 'detach' });
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
@@ -51,18 +44,17 @@ app.whenReady().then(() => {
   app.on('activate', () => { if (!mainWindow) createWindow(); });
 });
 
-app.on('window-all-closed', () => {
-  stopPhobos();
-  if (process.platform !== 'darwin') app.quit();
-});
-
+app.on('window-all-closed', () => { stopPhobos(); if (process.platform !== 'darwin') app.quit(); });
 app.on('before-quit', () => { stopPhobos(); });
 
-// ─── IPC surface ─────────────────────────────────────────────────────────────
-// Renderer calls these via contextBridge (preload.js).
-// All state flows renderer → main → renderer via ipcMain/send.
+// ─── IPC ──────────────────────────────────────────────────────────────────────
+ipcMain.handle('window:close',    () => app.quit());
+ipcMain.handle('window:minimize', () => mainWindow?.minimize());
+ipcMain.handle('shell:openUrl',   (_, url) => shell.openExternal(url));
 
-ipcMain.handle('launcher:start', async () => {
+// Channel selection → kick off launch sequence
+ipcMain.handle('launcher:selectChannel', async (_, channelId) => {
+  activeChannel = cfg.getChannelConfig(channelId);
   try {
     await runLaunchSequence();
   } catch (err) {
@@ -70,250 +62,359 @@ ipcMain.handle('launcher:start', async () => {
   }
 });
 
-ipcMain.handle('window:close',    () => { app.quit(); });
-ipcMain.handle('window:minimize', () => { mainWindow?.minimize(); });
+// Retry — re-runs the sequence with the same channel
+ipcMain.handle("launcher:retry", async () => {
+  if (!activeChannel) return;
+  try {
+    await runLaunchSequence();
+  } catch (err) {
+    send("status", { phase: "error", message: err.message });
+  }
+});
 
-// ─── Status helper ────────────────────────────────────────────────────────────
-// phase: 'check' | 'download-game' | 'download-phobos' | 'starting-ai' | 'ready' | 'error'
+// Launch the game — watch the game process so PHOBOS dies when the game does
+ipcMain.handle('game:launch', () => {
+  if (!activeChannel || !fs.existsSync(activeChannel.gameExe)) {
+    send('status', { phase: 'error', message: 'Game executable not found.' });
+    return;
+  }
+
+  // Keep the launcher process alive but hidden so we can watch the game
+  mainWindow?.hide();
+
+  const child = spawn(activeChannel.gameExe, [], {
+    cwd:      activeChannel.gameDir,
+    detached: false,   // NOT detached — we stay as parent so we get exit events
+    stdio:    'ignore',
+  });
+
+  child.on('exit', () => {
+    // Game closed — shut down PHOBOS then exit the launcher
+    stopPhobos();
+    app.quit();
+  });
+
+  child.on('error', () => {
+    stopPhobos();
+    app.quit();
+  });
+});
+
+// ─── AI platform support query ───────────────────────────────────────────────
+ipcMain.handle('launcher:aiSupported', () => cfg.PHOBOS_ZIP_URL !== null);
+
+// ─── AI opt-in handler ───────────────────────────────────────────────────────
+// Called after user accepts the model licence and clicks Enable.
+// Downloads the binary if needed, downloads the model, starts llama-server.
+ipcMain.handle('launcher:enableAI', async () => {
+  try {
+    send('ai-status', { phase: 'download-binary', message: 'Downloading AI module…', progress: 0 });
+    await ensurePhobosLite();
+
+    send('ai-status', { phase: 'starting', message: 'Starting AI engine…' });
+    await startPhobos();
+
+    send('ai-status', { phase: 'ready' });
+  } catch (err) {
+    console.warn('[PHOBOS] Enable AI failed:', err.message);
+    writeProviderFile(null);
+    send('ai-status', { phase: 'error', message: err.message });
+  }
+});
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 function send(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send(channel, payload);
   }
 }
 
-// ─── Main launch sequence ─────────────────────────────────────────────────────
+function log(msg) {
+  const ts = new Date().toISOString().slice(11, 19);
+  console.log(`[${ts}] ${msg}`);
+}
+
+// ─── Launch sequence ──────────────────────────────────────────────────────────
 async function runLaunchSequence() {
-  // 1. Check / install game
+  // 1. Fetch announcement (non-blocking — fire and forget to renderer)
+  fetchAnnouncement(activeChannel.announcementUrl);
+
+  // 2. Check / download game
   send('status', { phase: 'check', message: 'Checking for updates…' });
   await ensureGame();
 
-  // 2. Ensure PHOBOS-Lite binary exists (download if missing)
-  send('status', { phase: 'check-ai', message: 'Checking AI module…' });
-  await ensurePhobosLite();
-
-  // 3. Start PHOBOS-Lite
-  send('status', { phase: 'starting-ai', message: 'Starting AI engine…' });
-  await startPhobos();
-
-  // 4. Ready
-  send('status', { phase: 'ready', message: 'Ready' });
+  // PHOBOS-Lite is opt-in — not started here.
+  // Player enables it via the UI toggle; launcher:enableAI handles download + start.
+  writeProviderFile(null);
+  send('status', { phase: 'ready', message: '' });
 }
 
-// ─── Game update logic ────────────────────────────────────────────────────────
-async function ensureGame() {
-  const localVersion = readLocalVersion();
-
-  let onlineVersion;
+// ─── Announcement ─────────────────────────────────────────────────────────────
+async function fetchAnnouncement(url) {
   try {
-    onlineVersion = await fetchText(cfg.GAME_VERSION_URL);
-    onlineVersion = onlineVersion.trim();
+    const html = await fetchText(url);
+    const text = extractTextFromHtml(html);
+    send('announcement', { text });
   } catch {
-    // Network unavailable — if game exists, let it run anyway
-    if (fs.existsSync(cfg.GAME_EXE)) return;
-    throw new Error('No network and no local game installation found.');
-  }
-
-  if (!localVersion || localVersion !== onlineVersion) {
-    await downloadGame(onlineVersion);
+    send('announcement', { text: null });  // renderer shows fallback
   }
 }
 
-function readLocalVersion() {
-  try { return fs.readFileSync(cfg.VERSION_FILE, 'utf8').trim(); }
-  catch { return null; }
+function extractTextFromHtml(html) {
+  // Strip scripts and styles
+  html = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+  html = html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+
+  // Try to grab the Google Doc content div
+  const m = html.match(/<div[^>]*id="contents"[^>]*>([\s\S]*?)<\/div>\s*<\/body>/i);
+  if (m) html = m[1];
+
+  // Block-level tags → newlines
+  html = html.replace(/<\/p>/gi, '\n\n');
+  html = html.replace(/<br\s*\/?>/gi, '\n');
+  html = html.replace(/<\/h[1-6]>/gi, '\n\n');
+  html = html.replace(/<\/li>/gi, '\n');
+
+  // Strip all remaining tags
+  html = html.replace(/<[^>]+>/g, '');
+
+  // Decode entities manually (no DOM available in main process)
+  html = html
+    .replace(/&amp;/g,  '&')
+    .replace(/&lt;/g,   '<')
+    .replace(/&gt;/g,   '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g,  "'")
+    .replace(/&nbsp;/g, ' ');
+
+  // Normalise whitespace
+  html = html.replace(/[ \t]+/g, ' ');
+  html = html.replace(/\n[ \t]+/g, '\n');
+  html = html.replace(/\n{3,}/g, '\n\n');
+
+  return html.trim();
 }
 
-async function downloadGame(version) {
-  send('status', { phase: 'download-game', message: 'Downloading game…', progress: 0 });
+// ─── Game update ──────────────────────────────────────────────────────────────
+async function ensureGame() {
+  const { versionFile, versionUrl, downloadUrl, gameZip, gameExe } = activeChannel;
 
-  await downloadFile(cfg.GAME_DOWNLOAD_URL, cfg.GAME_ZIP, (progress) => {
-    send('status', { phase: 'download-game', message: 'Downloading game…', progress });
+  let localVersion = null;
+  try { localVersion = fs.readFileSync(versionFile, 'utf8').trim(); } catch {}
+
+  let onlineVersion = null;
+  try {
+    onlineVersion = (await fetchText(versionUrl)).trim();
+  } catch {
+    // Offline — if game exists, proceed
+    if (fs.existsSync(gameExe)) return;
+    throw new Error('No network connection and no local game installation found.');
+  }
+
+  send('version', { version: onlineVersion, channel: activeChannel.label });
+
+  if (localVersion === onlineVersion && fs.existsSync(gameExe)) return;
+
+  // Need download
+  const isUpdate = localVersion !== null && fs.existsSync(gameExe);
+  send('status', {
+    phase:   isUpdate ? 'download-update' : 'download-game',
+    message: isUpdate ? 'Downloading update…' : 'Downloading game…',
+    progress: 0,
   });
 
-  send('status', { phase: 'download-game', message: 'Extracting…', progress: 100 });
+  await downloadFile(downloadUrl, gameZip, (progress, received, total, speed, eta) => {
+    send('status', {
+      phase:    isUpdate ? 'download-update' : 'download-game',
+      message:  isUpdate ? 'Downloading update…' : 'Downloading game…',
+      progress,
+      received: formatBytes(received),
+      total:    formatBytes(total),
+      speed:    formatBytes(speed) + '/s',
+      eta:      formatEta(eta),
+    });
+  });
 
-  // Extract
-  const zip = new AdmZip(cfg.GAME_ZIP);
+  send('status', { phase: 'extracting', message: 'Extracting…', progress: 100 });
+
+  const zip = new AdmZip(gameZip);
   zip.extractAllTo(cfg.ROOT_PATH, true);
-  fs.unlinkSync(cfg.GAME_ZIP);
+  fs.unlinkSync(gameZip);
+  fs.writeFileSync(versionFile, onlineVersion, 'utf8');
 
-  fs.writeFileSync(cfg.VERSION_FILE, version, 'utf8');
+  send('version', { version: onlineVersion, channel: activeChannel.label });
 }
 
-// ─── PHOBOS-Lite binary ───────────────────────────────────────────────────────
+// ─── PHOBOS-Lite ──────────────────────────────────────────────────────────────
 async function ensurePhobosLite() {
-  if (fs.existsSync(cfg.PHOBOS_BINARY)) return;
+  if (!cfg.PHOBOS_ZIP_URL) return;  // unsupported platform — skip silently
 
-  // Determine which binary to download based on platform + arch
-  const binaryUrl = getPhobosLiteBinaryUrl();
-  if (!binaryUrl) {
-    // No binary available for this platform yet — silently skip AI
-    send('status', { phase: 'check-ai', message: 'AI module not available for this platform — skipping.' });
+  // Check local version against GitHub release version.txt
+  let localVersion  = null;
+  let remoteVersion = null;
+
+  try { localVersion = fs.readFileSync(cfg.PHOBOS_VERSION_FILE, 'utf8').trim(); } catch {}
+  try { remoteVersion = (await fetchText(cfg.PHOBOS_VERSION_URL)).trim(); } catch {
+    // Network unavailable — if binary exists, use it as-is
+    if (fs.existsSync(cfg.PHOBOS_BINARY)) return;
+    throw new Error('Cannot reach PHOBOS-Lite release server and no local installation found.');
+  }
+
+  // Already up to date
+  if (localVersion === remoteVersion && fs.existsSync(cfg.PHOBOS_BINARY)) {
+    log(`PHOBOS-Lite ${localVersion} already installed`);
     return;
   }
 
-  const binaryDir = path.dirname(cfg.PHOBOS_BINARY);
-  fs.mkdirSync(binaryDir, { recursive: true });
+  const action = localVersion ? `Updating AI module to ${remoteVersion}…` : 'Downloading AI module…';
+  log(`PHOBOS-Lite: ${action}`);
 
-  send('status', { phase: 'download-phobos', message: 'Downloading AI module…', progress: 0 });
+  fs.mkdirSync(cfg.PHOBOS_DIR, { recursive: true });
 
-  await downloadFile(binaryUrl, cfg.PHOBOS_BINARY + '.tmp', (progress) => {
-    send('status', { phase: 'download-phobos', message: 'Downloading AI module…', progress });
+  const zipDest = path.join(cfg.PHOBOS_DIR, cfg.PHOBOS_ZIP_NAME);
+
+  send('ai-status', { phase: 'download-binary', message: action, progress: 0 });
+
+  await downloadFile(cfg.PHOBOS_ZIP_URL, zipDest, (progress, received, total, speed, eta) => {
+    send('ai-status', {
+      phase:    'download-binary',
+      message:  action,
+      progress,
+      received: formatBytes(received),
+      total:    formatBytes(total),
+      speed:    formatBytes(speed) + '/s',
+      eta:      formatEta(eta),
+    });
   });
 
-  fs.renameSync(cfg.PHOBOS_BINARY + '.tmp', cfg.PHOBOS_BINARY);
+  // Extract zip over existing install (AdmZip overwrites)
+  send('ai-status', { phase: 'download-binary', message: 'Extracting AI module…', progress: 100 });
+  const zip = new AdmZip(zipDest);
+  zip.extractAllTo(cfg.PHOBOS_DIR, true);
+  fs.unlinkSync(zipDest);
 
-  if (process.platform !== 'win32') {
+  // Mark executable on Unix
+  if (process.platform !== 'win32' && fs.existsSync(cfg.PHOBOS_BINARY)) {
     fs.chmodSync(cfg.PHOBOS_BINARY, 0o755);
+    // Also chmod llama-server if present
+    const llamaBin = path.join(cfg.PHOBOS_DIR, 'llama-server');
+    if (fs.existsSync(llamaBin)) fs.chmodSync(llamaBin, 0o755);
   }
+
+  // Write version file so next launch skips download
+  fs.writeFileSync(cfg.PHOBOS_VERSION_FILE, remoteVersion, 'utf8');
+  log(`PHOBOS-Lite installed: ${remoteVersion}`);
 }
 
-function getPhobosLiteBinaryUrl() {
-  // TODO: replace with Autarch CDN URL when builds are published
-  // Returns null → launcher skips AI gracefully
-  const base = 'https://releases.autarch.gg/phobos-lite';
-  const ver  = '0.1.0';
-
-  const platform = process.platform;
-  const arch     = process.arch;  // 'x64' | 'arm64'
-
-  if (platform === 'win32'  && arch === 'x64')   return `${base}/${ver}/phobos-lite-win-x64.exe`;
-  if (platform === 'linux'  && arch === 'x64')   return `${base}/${ver}/phobos-lite-linux-x64`;
-  if (platform === 'linux'  && arch === 'arm64') return `${base}/${ver}/phobos-lite-linux-arm64`;
-  if (platform === 'darwin' && arch === 'x64')   return `${base}/${ver}/phobos-lite-mac-x64`;
-  if (platform === 'darwin' && arch === 'arm64') return `${base}/${ver}/phobos-lite-mac-arm64`;
-  return null;
-}
-
-// ─── PHOBOS-Lite process management ──────────────────────────────────────────
 async function startPhobos() {
-  if (!fs.existsSync(cfg.PHOBOS_BINARY)) {
-    // No binary — write a null provider file so the game knows to skip AI
-    writeProviderFile(null);
-    return;
-  }
+  if (!fs.existsSync(cfg.PHOBOS_BINARY)) { writeProviderFile(null); return; }
 
-  // Kill any leftover instance from a previous launch
   stopPhobos();
-
-  const args = [
-    '--port',     String(cfg.PHOBOS_PORT),
-    '--mode',     'game',
-    // These flags tell phobos-lite which GPU to avoid (the primary display adapter)
-    // phobos-lite reads PHOBOS_EXCLUDE_GPU_INDEX from env too, for redundancy
-    '--exclude-primary-gpu',
-  ];
 
   const env = {
     ...process.env,
-    PHOBOS_PORT:              String(cfg.PHOBOS_PORT),
-    PHOBOS_MODE:              'game',
-    PHOBOS_EXCLUDE_PRIMARY:   '1',   // phobos-lite skips device index 0 (primary display)
-    PHOBOS_MODEL_DIR:         path.join(cfg.ROOT_PATH, 'phobos-lite', 'models'),
+    PHOBOS_PORT:            String(cfg.PHOBOS_PORT),
+    PHOBOS_MODE:            'game',
+    PHOBOS_EXCLUDE_PRIMARY: '1',
+    PHOBOS_MODEL_DIR:       path.join(path.dirname(cfg.PHOBOS_BINARY), 'models'),
   };
 
-  phobosProc = spawn(cfg.PHOBOS_BINARY, args, {
-    env,
-    cwd:   path.dirname(cfg.PHOBOS_BINARY),
-    stdio: ['ignore', 'pipe', 'pipe'],
-    detached: false,
+  phobosProc = spawn(cfg.PHOBOS_BINARY, ['--port', String(cfg.PHOBOS_PORT), '--mode', 'game', '--exclude-primary-gpu'], {
+    env, cwd: path.dirname(cfg.PHOBOS_BINARY), stdio: ['ignore', 'pipe', 'pipe'], detached: false,
   });
 
-  // Pipe logs to a file for diagnostics
-  const logPath = path.join(cfg.ROOT_PATH, 'phobos-lite', 'phobos.log');
-  fs.mkdirSync(path.dirname(logPath), { recursive: true });
+  const logPath = path.join(path.dirname(cfg.PHOBOS_BINARY), 'phobos.log');
   const logStream = fs.createWriteStream(logPath, { flags: 'a' });
   phobosProc.stdout.pipe(logStream);
   phobosProc.stderr.pipe(logStream);
+  phobosProc.on('exit', () => { phobosProc = null; });
 
-  phobosProc.on('exit', (code) => {
-    console.log(`[PHOBOS] exited with code ${code}`);
-    phobosProc = null;
-  });
-
-  // Wait for health check
   const model = await waitForPhobosHealth();
+  writeProviderFile(model ? {
+    type: 'phobos-lite', url: `http://127.0.0.1:${cfg.PHOBOS_PORT}`,
+    chatPath: '/v1/chat/completions', healthPath: '/health', model, port: cfg.PHOBOS_PORT,
+  } : null);
 
-  // Write provider file for the game to read at startup
-  writeProviderFile({
-    type:        'phobos-lite',
-    url:         `http://127.0.0.1:${cfg.PHOBOS_PORT}`,
-    chatPath:    '/v1/chat/completions',
-    healthPath:  '/health',
-    model,
-    port:        cfg.PHOBOS_PORT,
-  });
-
-  send('ai-ready', { model });
+  if (model) send('ai-ready', { model });
 }
 
 function stopPhobos() {
-  clearInterval(phobosHealthTimer);
-  if (phobosProc) {
-    try { phobosProc.kill('SIGTERM'); } catch {}
-    phobosProc = null;
-  }
+  if (phobosProc) { try { phobosProc.kill('SIGTERM'); } catch {} phobosProc = null; }
 }
 
 async function waitForPhobosHealth() {
+  // phobos-lite goes through three phases after launch:
+  //   1. Hardware detection + model selection  (~2-5s,  health: 'starting')
+  //   2. Model download from HuggingFace       (minutes, health: 'downloading', progress 0-100)
+  //   3. llama-server startup                  (~5-30s, health: 'starting')
+  //   4. Ready                                 health: 'ok'
+  //
+  // We poll /health and surface whatever phase is reported so the
+  // progress bar and label stay meaningful throughout.
+
   const deadline = Date.now() + cfg.PHOBOS_HEALTH_TIMEOUT_MS;
 
   while (Date.now() < deadline) {
     try {
-      const text = await fetchLocalJson(`http://127.0.0.1:${cfg.PHOBOS_PORT}/health`);
-      if (text && text.status === 'ok') {
-        return text.model || 'unknown';
+      const data = await fetchLocalJson(`http://127.0.0.1:${cfg.PHOBOS_PORT}/health`);
+
+      if (data?.status === 'ok') {
+        return data.model || 'unknown';
+      }
+
+      // Surface download progress if phobos-lite reports it
+      if (data?.status === 'downloading') {
+        const pct  = data.progress ?? 0;
+        const mb   = data.totalMB   ? `${(data.totalMB * pct / 100).toFixed(0)} MB / ${data.totalMB} MB` : '';
+        send('ai-status', {
+          phase:   'download-model',
+          message: `Downloading AI model… ${data.model || ''}`,
+          progress: pct,
+          received: mb,
+          total:    data.totalMB ? `${data.totalMB} MB` : '',
+          speed:    data.speedMBs ? `${data.speedMBs.toFixed(1)} MB/s` : '',
+          eta:      data.etaSecs  ? formatEta(data.etaSecs)            : '',
+        });
+      } else {
+        // 'starting' — hardware probe or llama-server warming up
+        const msg = data?.phase === 'llama-starting'
+          ? 'Starting inference engine…'
+          : 'Preparing AI engine…';
+        send('ai-status', { phase: 'starting', message: msg });
       }
     } catch {
-      // not ready yet
+      // phobos-lite not yet listening — still starting up
+      send('ai-status', { phase: 'starting', message: 'Starting AI engine…' });
     }
+
     await sleep(cfg.PHOBOS_HEALTH_POLL_MS);
-    send('status', { phase: 'starting-ai', message: 'Waiting for AI engine…' });
   }
 
-  // Timed out — log and continue without AI rather than blocking the game
-  console.warn('[PHOBOS] Health check timed out — launching game without AI');
+  log('PHOBOS-Lite health check timed out');
   writeProviderFile(null);
   return null;
 }
 
 function writeProviderFile(provider) {
-  // provider = null → AI not available
-  const content = JSON.stringify({
-    available:  provider !== null,
-    provider:   provider || null,
-    writtenAt:  new Date().toISOString(),
-  }, null, 2);
-  fs.writeFileSync(cfg.PHOBOS_PROVIDER_FILE, content, 'utf8');
+  fs.writeFileSync(cfg.PHOBOS_PROVIDER_FILE, JSON.stringify({
+    available: provider !== null, provider: provider || null, writtenAt: new Date().toISOString(),
+  }, null, 2), 'utf8');
 }
-
-// ─── IPC: launch game ─────────────────────────────────────────────────────────
-ipcMain.handle('game:launch', () => {
-  if (!fs.existsSync(cfg.GAME_EXE)) {
-    send('status', { phase: 'error', message: 'Game executable not found.' });
-    return;
-  }
-
-  const child = spawn(cfg.GAME_EXE, [], {
-    cwd:      cfg.GAME_DIR,
-    detached: true,
-    stdio:    'ignore',
-  });
-  child.unref();
-
-  // Close launcher after a short delay so the game has time to initialise
-  setTimeout(() => { app.quit(); }, 1500);
-});
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 function fetchText(url) {
   return new Promise((resolve, reject) => {
     const mod = url.startsWith('https') ? https : http;
-    mod.get(url, (res) => {
+    const req = mod.get(url, (res) => {
+      if (res.statusCode === 301 || res.statusCode === 302) {
+        return fetchText(res.headers.location).then(resolve).catch(reject);
+      }
       let data = '';
       res.on('data', (c) => { data += c; });
-      res.on('end', () => { resolve(data); });
-    }).on('error', reject);
+      res.on('end', () => resolve(data));
+    });
+    req.on('error', reject);
+    req.setTimeout(10000, () => { req.destroy(); reject(new Error('Timeout')); });
   });
 }
 
@@ -322,10 +423,7 @@ function fetchLocalJson(url) {
     http.get(url, (res) => {
       let data = '';
       res.on('data', (c) => { data += c; });
-      res.on('end', () => {
-        try { resolve(JSON.parse(data)); }
-        catch { reject(new Error('bad json')); }
-      });
+      res.on('end', () => { try { resolve(JSON.parse(data)); } catch { reject(new Error('bad json')); } });
     }).on('error', reject);
   });
 }
@@ -333,37 +431,55 @@ function fetchLocalJson(url) {
 function downloadFile(url, dest, onProgress) {
   return new Promise((resolve, reject) => {
     const mod = url.startsWith('https') ? https : http;
+    let lastReceived = 0;
+    let lastTime     = Date.now();
 
-    const doDownload = (targetUrl) => {
-      mod.get(targetUrl, (res) => {
-        // Follow redirects (GitHub releases redirect to S3)
-        if (res.statusCode === 301 || res.statusCode === 302) {
-          return doDownload(res.headers.location);
-        }
-        if (res.statusCode !== 200) {
-          return reject(new Error(`Download failed: HTTP ${res.statusCode}`));
-        }
+    const doGet = (u) => {
+      mod.get(u, (res) => {
+        if (res.statusCode === 301 || res.statusCode === 302) return doGet(res.headers.location);
+        if (res.statusCode !== 200) return reject(new Error(`HTTP ${res.statusCode}`));
 
-        const total = parseInt(res.headers['content-length'] || '0', 10);
-        let received = 0;
+        const total    = parseInt(res.headers['content-length'] || '0', 10);
+        let received   = 0;
+        const out      = fs.createWriteStream(dest);
 
-        const out = fs.createWriteStream(dest);
         res.on('data', (chunk) => {
           received += chunk.length;
-          if (total > 0 && onProgress) {
-            onProgress(Math.round((received / total) * 100));
+          const now     = Date.now();
+          const elapsed = (now - lastTime) / 1000;
+
+          if (elapsed >= 0.5 || received === total) {
+            const speed = elapsed > 0 ? (received - lastReceived) / elapsed : 0;
+            const eta   = speed > 0 ? (total - received) / speed : 0;
+            lastReceived = received;
+            lastTime     = now;
+            const pct    = total > 0 ? Math.round(received / total * 100) : 0;
+            if (onProgress) onProgress(pct, received, total, speed, eta);
           }
         });
+
         res.pipe(out);
         out.on('finish', resolve);
         out.on('error', reject);
       }).on('error', reject);
     };
 
-    doDownload(url);
+    doGet(url);
   });
 }
 
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
+function formatBytes(bytes) {
+  if (bytes < 1024)          return `${bytes} B`;
+  if (bytes < 1024 * 1024)   return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 ** 3)     return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+  return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
 }
+
+function formatEta(seconds) {
+  if (!seconds || seconds <= 0) return '';
+  if (seconds < 60)   return `${Math.round(seconds)}s remaining`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s remaining`;
+  return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m remaining`;
+}
+
+function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }

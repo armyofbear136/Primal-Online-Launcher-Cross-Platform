@@ -3,252 +3,392 @@
 <head>
   <meta charset="UTF-8" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; script-src 'self' 'unsafe-inline';" />
-  <title>Primal Online</title>
+  <title>Primal Online Launcher</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Rajdhani:wght@300;400;500&display=swap');
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --gold:        #c9a84c;
-      --gold-dim:    #7a6028;
-      --red:         #c0392b;
-      --red-bright:  #e74c3c;
-      --blue-glow:   #aee3f1;
-      --dark:        #050310;
-      --panel:       rgba(5, 3, 16, 0.82);
-      --border:      rgba(201, 168, 76, 0.35);
-      --text-main:   #e8dcc8;
-      --text-dim:    #8a7a60;
+      --gold:       #c9a84c;
+      --gold-dim:   #7a6028;
+      --red:        #8B0000;
+      --red-bright: #A52A2A;
+      --blue-glow:  #aee3f1;
+      --dark:       #050310;
+      --overlay:    rgba(0,0,0,0.2);
+      --panel-bg:   rgba(0,0,0,0.53);
+      --panel-border: #8B0000;
+      --text:       #CCC5B8;
+      --text-dim:   #8a7a60;
     }
 
     html, body {
       width: 100%; height: 100%;
       overflow: hidden;
       background: var(--dark);
-      font-family: 'Rajdhani', sans-serif;
-      color: var(--text-main);
+      font-family: 'Consolas', monospace;
+      color: var(--text);
       user-select: none;
-      -webkit-app-region: no-drag; /* children opt in */
     }
 
-    /* ── Background ──────────────────────────────────────────────── */
+    /* ── Background ─────────────────────────────────── */
     #bg {
       position: fixed; inset: 0;
-      background-image: url('../assets/bg.png');
+      background-image: url('assets/launcherbg.png');
       background-size: cover;
       background-position: center top;
     }
-    /* Atmospheric vignette */
     #bg::after {
       content: '';
       position: absolute; inset: 0;
-      background:
-        radial-gradient(ellipse 80% 60% at 50% 100%, rgba(5,3,16,0.92) 0%, transparent 70%),
-        radial-gradient(ellipse 100% 40% at 50% 0%,   rgba(5,3,16,0.4) 0%, transparent 80%);
+      background: var(--overlay);
     }
 
-    /* ── Drag region — top bar ────────────────────────────────────── */
+    /* ── Titlebar ────────────────────────────────────── */
     #titlebar {
       position: fixed; top: 0; left: 0; right: 0;
-      height: 36px;
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 0 12px;
+      height: 32px;
+      display: flex; align-items: center; justify-content: flex-end;
+      padding: 0 10px;
       -webkit-app-region: drag;
       z-index: 100;
-      background: linear-gradient(to bottom, rgba(5,3,16,0.7), transparent);
     }
-    #titlebar .title {
-      font-family: 'Cinzel', serif;
-      font-size: 11px;
-      letter-spacing: 0.2em;
-      color: var(--gold-dim);
-      -webkit-app-region: drag;
-    }
-    #window-controls {
+    #win-controls {
       display: flex; gap: 8px;
       -webkit-app-region: no-drag;
     }
-    #window-controls button {
-      width: 14px; height: 14px;
-      border-radius: 50%;
-      border: none; cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 9px; font-weight: bold; color: transparent;
+    #win-controls button {
+      width: 13px; height: 13px;
+      border-radius: 50%; border: none; cursor: pointer;
+      font-size: 8px; font-weight: bold; color: transparent;
       transition: color 0.15s;
     }
-    #window-controls button:hover { color: rgba(0,0,0,0.7); }
-    #btn-close    { background: #c0392b; }
-    #btn-minimize { background: #c9a84c; }
+    #win-controls button:hover { color: rgba(0,0,0,0.6); }
+    #btn-min   { background: #c9a84c; }
+    #btn-close { background: #8B0000; }
 
-    /* ── Main layout ─────────────────────────────────────────────── */
+    /* ── Main layout ─────────────────────────────────── */
     #ui {
       position: fixed; inset: 0;
       display: flex; flex-direction: column;
-      justify-content: flex-end;
-      padding-bottom: 36px;
-      z-index: 10;
+      padding: 40px;
     }
 
-    /* ── Bottom panel ────────────────────────────────────────────── */
-    #bottom-panel {
+    /* ── Title ───────────────────────────────────────── */
+    #title {
+      font-family: 'Impact', sans-serif;
+      font-size: 52px;
+      font-weight: bold;
+      color: #B8A68E;
+      text-shadow: 4px 4px 8px rgba(0,0,0,0.9);
+      margin-bottom: 10px;
+      flex-shrink: 0;
+    }
+
+    /* ── Channel picker (shown on first load) ────────── */
+    #channel-screen {
+      position: fixed; inset: 0;
       display: flex; flex-direction: column;
-      align-items: center; gap: 14px;
+      align-items: center; justify-content: center;
+      gap: 24px;
+      z-index: 50;
+      background: rgba(5,3,16,0.7);
     }
-
-    /* ── Status line ─────────────────────────────────────────────── */
-    #status-line {
-      display: flex; flex-direction: column; align-items: center; gap: 4px;
-      min-height: 42px;
-    }
-    #status-text {
-      font-family: 'Rajdhani', sans-serif;
-      font-size: 13px;
-      font-weight: 400;
-      letter-spacing: 0.12em;
-      color: var(--blue-glow);
+    #channel-screen h2 {
+      font-family: 'Cinzel', serif;
+      font-size: 14px;
+      letter-spacing: 0.3em;
+      color: var(--text-dim);
       text-transform: uppercase;
-      opacity: 0.85;
-      transition: opacity 0.3s;
     }
-    #status-text.hidden { opacity: 0; }
+    #channel-btns {
+      display: flex; gap: 24px;
+    }
+    .ch-btn {
+      width: 220px; height: 70px;
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      color: var(--text);
+      font-family: 'Consolas', monospace;
+      font-size: 15px;
+      letter-spacing: 0.15em;
+      cursor: pointer;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 4px;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .ch-btn:hover { background: rgba(0,0,0,0.7); border-color: var(--red-bright); }
+    .ch-btn span.sub {
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 0.1em;
+    }
+    .ch-btn.experimental span.sub { color: var(--red); }
 
-    /* ── Progress bar ────────────────────────────────────────────── */
-    #progress-wrap {
-      width: 400px; height: 3px;
-      background: rgba(201,168,76,0.12);
-      border-radius: 2px;
-      overflow: hidden;
-      opacity: 0;
-      transition: opacity 0.3s;
+    /* ── Announcement panel ──────────────────────────── */
+    #announcement {
+      flex: 1;
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      box-shadow: 0 0 20px rgba(139,0,0,0.4);
+      padding: 20px;
+      overflow-y: auto;
+      margin-bottom: 10px;
     }
-    #progress-wrap.visible { opacity: 1; }
-    #progress-bar {
+    #announcement-text {
+      font-size: 15px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      color: var(--text);
+    }
+    /* Custom scrollbar */
+    #announcement::-webkit-scrollbar { width: 6px; }
+    #announcement::-webkit-scrollbar-track { background: transparent; }
+    #announcement::-webkit-scrollbar-thumb { background: var(--red); border-radius: 3px; }
+
+    /* ── Progress panel ──────────────────────────────── */
+    #progress-panel {
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      box-shadow: 0 0 20px rgba(139,0,0,0.4);
+      padding: 20px;
+      margin-bottom: 20px;
+      display: none;
+    }
+    #progress-panel.visible { display: block; }
+    #progress-bar-track {
+      width: 100%; height: 25px;
+      background: #1a1a1a;
+      border: 1px solid #4a4a4a;
+    }
+    #progress-bar-fill {
       height: 100%;
       width: 0%;
-      background: linear-gradient(90deg, var(--gold-dim), var(--gold));
-      border-radius: 2px;
-      transition: width 0.2s ease-out;
-      position: relative;
+      background: var(--red);
+      transition: width 0.3s ease-out;
     }
-    /* shimmer on indeterminate */
-    #progress-bar.indeterminate {
-      width: 40% !important;
-      animation: shimmer 1.4s ease-in-out infinite;
+    #progress-bar-fill.indeterminate {
+      width: 30% !important;
+      animation: sweep 1.4s ease-in-out infinite;
     }
-    @keyframes shimmer {
-      0%   { margin-left: -40%; }
+    @keyframes sweep {
+      0%   { margin-left: -30%; }
       100% { margin-left: 100%; }
     }
-
-    /* ── AI badge (shown when PHOBOS is active) ──────────────────── */
-    #ai-badge {
-      display: flex; align-items: center; gap: 7px;
-      padding: 4px 14px;
-      border: 1px solid rgba(174, 227, 241, 0.2);
-      border-radius: 2px;
-      background: rgba(5, 3, 16, 0.6);
-      font-size: 11px;
-      letter-spacing: 0.14em;
-      color: var(--blue-glow);
-      text-transform: uppercase;
-      opacity: 0;
-      transform: translateY(4px);
-      transition: opacity 0.4s, transform 0.4s;
+    #progress-labels {
+      display: flex; justify-content: space-between;
+      margin-top: 12px;
+      font-size: 13px; color: var(--text);
     }
-    #ai-badge.visible {
-      opacity: 0.75;
-      transform: translateY(0);
+
+    /* ── Bottom bar ──────────────────────────────────── */
+    #bottom-bar {
+      display: flex; align-items: center;
+      flex-shrink: 0;
+    }
+    /* Left: website link */
+    #website-link {
+      flex: 1;
+      font-size: 14px;
+      color: #B8A68E;
+      text-decoration: underline;
+      cursor: pointer;
+    }
+    #website-link:hover { color: var(--text); }
+
+    /* Center: play button */
+    #play-wrap {
+      flex: 0 0 auto;
+      margin: 0 auto;
+      margin-bottom: -30px;
+    }
+    #play-btn {
+      width: 320px; height: 55px;
+      background: #1a0000;
+      border: 2px solid var(--red);
+      color: var(--text);
+      font-family: 'Consolas', monospace;
+      font-size: 18px;
+      letter-spacing: 0.1em;
+      cursor: pointer;
+      box-shadow: 0 0 25px rgba(139,0,0,0.6);
+      transition: background 0.2s, border-color 0.2s;
+    }
+    #play-btn:hover:not(:disabled) { background: #2a0000; border-color: var(--red-bright); }
+    #play-btn:disabled { opacity: 0.5; cursor: default; }
+    #play-btn.error { border-color: #c0392b; color: #e74c3c; }
+
+    /* Right: version + channel + discord */
+    #right-info {
+      flex: 1;
+      display: flex; flex-direction: column;
+      align-items: flex-end; gap: 4px;
+    }
+    #version-text { font-size: 14px; color: var(--text); }
+    #channel-badge {
+      font-size: 11px; font-weight: bold;
+      color: var(--red);
+      letter-spacing: 0.1em;
+    }
+    #discord-btn {
+      display: flex; align-items: center; gap: 8px;
+      height: 40px; padding: 0 16px;
+      background: #1a0000;
+      border: 2px solid var(--red);
+      color: var(--text);
+      font-family: 'Consolas', monospace;
+      font-size: 14px;
+      cursor: pointer;
+      box-shadow: 0 0 15px rgba(139,0,0,0.4);
+      transition: background 0.2s, border-color 0.2s;
+      margin-top: 6px;
+    }
+    #discord-btn:hover { background: #2a0000; border-color: var(--red-bright); }
+    #discord-icon {
+      width: 20px; height: 20px;
+      /* Inline Discord logo as SVG so we don't need an image file */
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 127.14 96.36'%3E%3Cpath fill='%23CCC5B8' d='M107.7 8.07A105.15 105.15 0 0 0 81.47 0a72.06 72.06 0 0 0-3.36 6.83 97.68 97.68 0 0 0-29.11 0A72.37 72.37 0 0 0 45.64 0a105.89 105.89 0 0 0-26.25 8.09C2.79 32.65-1.71 56.6.54 80.21a105.73 105.73 0 0 0 32.17 16.15 77.7 77.7 0 0 0 6.89-11.11 68.42 68.42 0 0 1-10.85-5.18c.91-.66 1.8-1.34 2.66-2a75.57 75.57 0 0 0 64.32 0c.87.71 1.76 1.39 2.66 2a68.68 68.68 0 0 1-10.87 5.19 77 77 0 0 0 6.89 11.1 105.25 105.25 0 0 0 32.19-16.14c2.64-27.38-4.51-51.11-18.9-72.15ZM42.45 65.69C36.18 65.69 31 60 31 53s5-12.74 11.43-12.74S54 46 53.89 53s-5.05 12.69-11.44 12.69Zm42.24 0C78.41 65.69 73.25 60 73.25 53s5-12.74 11.44-12.74S96.23 46 96.12 53s-5.04 12.69-11.43 12.69Z'/%3E%3C/svg%3E");
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: center;
+      flex-shrink: 0;
+    }
+
+    /* ── AI toggle button ────────────────────────────────── */
+    #ai-toggle-wrap {
+      display: flex; align-items: center; gap: 10px;
+      margin-top: 8px;
+    }
+    #ai-toggle-btn {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 14px;
+      background: #0d0d1a;
+      border: 1px solid #2a2a4a;
+      color: #6a7a9a;
+      font-family: 'Consolas', monospace;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s, background 0.2s;
+      white-space: nowrap;
+    }
+    #ai-toggle-btn:hover:not(:disabled) {
+      border-color: #aee3f1;
+      color: #aee3f1;
+      background: #0d1520;
+    }
+    #ai-toggle-btn:disabled {
+      opacity: 0.4; cursor: default;
+    }
+    #ai-toggle-btn.active {
+      border-color: rgba(174,227,241,0.4);
+      color: #aee3f1;
+      background: #0d1520;
+    }
+    #ai-toggle-btn.error {
+      border-color: rgba(139,0,0,0.6);
+      color: #c0392b;
     }
     #ai-dot {
       width: 6px; height: 6px; border-radius: 50%;
-      background: var(--blue-glow);
-      animation: pulse 2s ease-in-out infinite;
+      background: #2a2a4a;
+      transition: background 0.3s;
+      flex-shrink: 0;
     }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50%       { opacity: 0.3; }
-    }
+    #ai-toggle-btn.active  #ai-dot { background: #aee3f1; animation: pulse 2s infinite; }
+    #ai-toggle-btn.error   #ai-dot { background: #c0392b; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
 
-    /* ── Play button ─────────────────────────────────────────────── */
-    #play-wrap {
-      position: relative;
+    /* ── AI progress bar (reuses same track style) ────── */
+    #ai-progress-panel {
+      background: var(--panel-bg);
+      border: 1px solid #1a2a3a;
+      padding: 14px 20px;
+      margin-bottom: 8px;
+      display: none;
     }
-    /* Corner ornaments */
-    #play-wrap::before,
-    #play-wrap::after {
-      content: '';
-      position: absolute;
-      width: 12px; height: 12px;
-      border-color: var(--gold);
-      border-style: solid;
-      opacity: 0.6;
+    #ai-progress-panel.visible { display: block; }
+    #ai-progress-track {
+      width: 100%; height: 6px;
+      background: #1a1a2a;
+      border: 1px solid #2a2a4a;
     }
-    #play-wrap::before {
-      top: -1px; left: -1px;
-      border-width: 1px 0 0 1px;
+    #ai-progress-fill {
+      height: 100%; width: 0%;
+      background: #aee3f1;
+      transition: width 0.3s ease-out;
     }
-    #play-wrap::after {
-      bottom: -1px; right: -1px;
-      border-width: 0 1px 1px 0;
+    #ai-progress-fill.indeterminate {
+      width: 30% !important;
+      animation: sweep 1.4s ease-in-out infinite;
     }
-
-    #play-btn {
-      min-width: 220px;
-      height: 56px;
-      padding: 0 44px;
-      background: rgba(5, 3, 16, 0.88);
-      border: 1px solid var(--border);
-      color: var(--blue-glow);
-      font-family: 'Cinzel', serif;
-      font-size: 15px;
-      font-weight: 600;
-      letter-spacing: 0.25em;
-      text-transform: uppercase;
-      cursor: pointer;
-      outline: none;
-      position: relative;
-      overflow: hidden;
-      transition: background 0.2s, border-color 0.2s, color 0.2s, box-shadow 0.2s;
-    }
-    #play-btn::before {
-      content: '';
-      position: absolute; inset: 0;
-      background: linear-gradient(135deg, rgba(201,168,76,0.07) 0%, transparent 60%);
-      pointer-events: none;
-    }
-    #play-btn:hover:not(:disabled) {
-      background: rgba(12, 8, 35, 0.9);
-      border-color: rgba(201, 168, 76, 0.65);
-      color: var(--gold);
-      box-shadow: 0 0 24px rgba(201,168,76,0.18), inset 0 0 20px rgba(201,168,76,0.04);
-    }
-    #play-btn:active:not(:disabled) {
-      transform: scale(0.99);
-    }
-    #play-btn:disabled {
-      opacity: 0.45;
-      cursor: default;
-    }
-    #play-btn.error {
-      border-color: rgba(192, 57, 43, 0.65);
-      color: var(--red-bright);
-    }
-    #play-btn.error:hover:not(:disabled) {
-      border-color: var(--red-bright);
-      color: var(--red-bright);
-      box-shadow: 0 0 24px rgba(231,76,60,0.2);
-    }
-
-    /* ── Version ─────────────────────────────────────────────────── */
-    #version-text {
-      position: fixed;
-      bottom: 10px; right: 14px;
-      font-family: 'Rajdhani', sans-serif;
+    #ai-progress-label {
+      margin-top: 6px;
       font-size: 11px;
-      letter-spacing: 0.1em;
-      color: var(--text-dim);
+      color: #6a8aaa;
+      letter-spacing: 0.08em;
     }
+
+    /* ── Licence modal ───────────────────────────────────── */
+    #licence-modal {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(5,3,16,0.88);
+      z-index: 200;
+      align-items: center; justify-content: center;
+    }
+    #licence-modal.open { display: flex; }
+    #licence-box {
+      width: 680px;
+      background: #0a0818;
+      border: 1px solid #1a2a3a;
+      box-shadow: 0 0 40px rgba(174,227,241,0.06);
+      display: flex; flex-direction: column;
+      max-height: 70vh;
+    }
+    #licence-header {
+      padding: 18px 24px 14px;
+      border-bottom: 1px solid #1a2a3a;
+      font-family: 'Cinzel', serif;
+      font-size: 12px;
+      letter-spacing: 0.25em;
+      color: #aee3f1;
+    }
+    #licence-body {
+      padding: 20px 24px;
+      overflow-y: auto;
+      flex: 1;
+      font-size: 12px;
+      line-height: 1.7;
+      color: #8a9aaa;
+      white-space: pre-wrap;
+    }
+    #licence-body::-webkit-scrollbar { width: 4px; }
+    #licence-body::-webkit-scrollbar-thumb { background: #1a2a3a; }
+    #licence-footer {
+      padding: 16px 24px;
+      border-top: 1px solid #1a2a3a;
+      display: flex; justify-content: flex-end; gap: 12px;
+    }
+    .licence-btn {
+      padding: 8px 22px;
+      font-family: 'Consolas', monospace;
+      font-size: 12px;
+      letter-spacing: 0.1em;
+      cursor: pointer;
+      border: 1px solid;
+      background: transparent;
+    }
+    #licence-decline {
+      border-color: #2a2a3a; color: #4a4a6a;
+    }
+    #licence-decline:hover { border-color: #4a4a6a; color: #8a8aaa; }
+    #licence-accept {
+      border-color: #aee3f1; color: #aee3f1;
+    }
+    #licence-accept:hover { background: rgba(174,227,241,0.08); }
   </style>
 </head>
 <body>
@@ -256,139 +396,347 @@
   <div id="bg"></div>
 
   <div id="titlebar">
-    <span class="title">PRIMAL ONLINE</span>
-    <div id="window-controls">
-      <button id="btn-minimize" title="Minimize">–</button>
-      <button id="btn-close"    title="Close">✕</button>
+    <div id="win-controls">
+      <button id="btn-min"   title="Minimize">–</button>
+      <button id="btn-close" title="Close">✕</button>
     </div>
   </div>
 
-  <div id="ui">
-    <div id="bottom-panel">
+  <!-- Channel picker — shown until user picks stable or experimental -->
+  <div id="channel-screen">
+    <h2>Select Build Channel</h2>
+    <div id="channel-btns">
+      <button class="ch-btn" data-channel="stable">
+        STABLE
+        <span class="sub">Recommended · well-tested</span>
+      </button>
+      <button class="ch-btn experimental" data-channel="experimental">
+        EXPERIMENTAL
+        <span class="sub">Latest features · may be unstable</span>
+      </button>
+    </div>
+  </div>
 
-      <div id="ai-badge">
-        <div id="ai-dot"></div>
-        <span id="ai-model-name">AI ACTIVE</span>
-      </div>
+  <!-- Main launcher UI — hidden until channel is chosen -->
+  <div id="ui" style="display:none;">
 
-      <div id="status-line">
-        <div id="status-text">Initialising…</div>
-        <div id="progress-wrap">
-          <div id="progress-bar indeterminate"></div>
-        </div>
+    <div id="title">PRIMAL ONLINE</div>
+
+    <!-- Announcement -->
+    <div id="announcement">
+      <div id="announcement-text">Loading announcement…</div>
+    </div>
+
+    <!-- Download progress -->
+    <div id="progress-panel">
+      <div id="progress-bar-track">
+        <div id="progress-bar-fill"></div>
       </div>
+      <div id="progress-labels">
+        <span id="progress-status">Preparing…</span>
+        <span id="progress-speed"></span>
+      </div>
+    </div>
+
+    <!-- AI download progress (separate from game download) -->
+    <div id="ai-progress-panel">
+      <div id="ai-progress-track"><div id="ai-progress-fill"></div></div>
+      <div id="ai-progress-label">Initialising…</div>
+    </div>
+
+    <!-- Bottom bar -->
+    <div id="bottom-bar">
+      <span id="website-link">primalonline.net</span>
 
       <div id="play-wrap">
-        <button id="play-btn" disabled>CHECKING</button>
+        <button id="play-btn" disabled>CHECKING FOR UPDATES</button>
       </div>
 
+      <div id="right-info">
+        <span id="version-text"></span>
+        <span id="channel-badge"></span>
+        <button id="discord-btn">
+          <div id="discord-icon"></div>
+          Discord
+        </button>
+
+        <!-- AI opt-in -->
+        <div id="ai-toggle-wrap">
+          <button id="ai-toggle-btn" disabled>
+            <div id="ai-dot"></div>
+            <span id="ai-toggle-label">Enable Advanced AI ~ 8 GB</span>
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Licence modal -->
+  <div id="licence-modal">
+    <div id="licence-box">
+      <div id="licence-header">AI MODEL LICENCE AGREEMENT</div>
+      <div id="licence-body"></div>
+      <div id="licence-footer">
+        <button class="licence-btn" id="licence-decline">Decline</button>
+        <button class="licence-btn" id="licence-accept">Accept &amp; Download</button>
+      </div>
     </div>
   </div>
 
-  <div id="version-text"></div>
-
   <script>
-    // ── DOM refs ────────────────────────────────────────────────────
-    const playBtn      = document.getElementById('play-btn');
-    const statusText   = document.getElementById('status-text');
-    const progressWrap = document.getElementById('progress-wrap');
-    const progressBar  = document.getElementById('progress-bar');
-    const aiBadge      = document.getElementById('ai-badge');
-    const aiModelName  = document.getElementById('ai-model-name');
-    const versionText  = document.getElementById('version-text');
-    const btnClose     = document.getElementById('btn-close');
-    const btnMin       = document.getElementById('btn-minimize');
+    // ── Gemma 3 licence text ─────────────────────────────────────────
+    // Source: https://ai.google.dev/gemma/terms
+    const GEMMA_LICENCE = `GEMMA TERMS OF USE
+Last Modified: February 21, 2025
 
-    // ── Window controls ─────────────────────────────────────────────
-    btnClose.addEventListener('click', () => window.launcher.close());
-    btnMin.addEventListener('click',   () => window.launcher.minimize());
+By using, reproducing, modifying, distributing, performing or displaying any portion or element of Gemma, Model Derivatives or the Gemma Outputs, you agree to the terms of this Gemma Terms of Use ("Terms"). If you do not agree to these Terms, then you must not use Gemma.
 
-    // ── State machine ───────────────────────────────────────────────
+1. DEFINITIONS
+"Gemma" means the set of machine learning language model weights identified as Gemma and made available by Google.
+"Model Derivatives" means any derivative works of Gemma or modifications thereof.
+
+2. USE RIGHTS
+Subject to the Terms, Google grants you a non-exclusive, worldwide, non-transferable, non-sublicensable, revocable, royalty free limited license to use, reproduce, distribute, copy, create derivative works of, and make modifications to Gemma for permitted purposes.
+
+3. PERMITTED USES
+You may use Gemma for any lawful purpose, including commercial use, except those prohibited below.
+
+4. USAGE POLICIES
+You must not use Gemma or its outputs to:
+  a. Violate any applicable law or infringe any rights of third parties.
+  b. Generate content designed to deceive or harm individuals.
+  c. Build systems for surveillance that violates human rights.
+  d. Generate content that is unlawful, harmful, hateful, or discriminatory.
+
+5. DISTRIBUTION
+If you distribute Gemma or Model Derivatives, you must include a copy of these Terms and prominently display "Built with Gemma" in related materials.
+
+6. INTELLECTUAL PROPERTY
+Google retains all intellectual property rights in Gemma. These Terms do not grant any rights to Google's trademarks or logos.
+
+7. DISCLAIMER OF WARRANTIES
+GEMMA IS PROVIDED "AS IS" WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED.
+
+8. LIMITATION OF LIABILITY
+Google will not be liable for any damages arising from your use of Gemma.
+
+Full terms: https://ai.google.dev/gemma/terms`;
+
+    // ── DOM refs ─────────────────────────────────────────────────────
+    const channelScreen   = document.getElementById('channel-screen');
+    const ui              = document.getElementById('ui');
+    const announcementText= document.getElementById('announcement-text');
+    const progressPanel   = document.getElementById('progress-panel');
+    const progressFill    = document.getElementById('progress-bar-fill');
+    const progressStatus  = document.getElementById('progress-status');
+    const progressSpeed   = document.getElementById('progress-speed');
+    const playBtn         = document.getElementById('play-btn');
+    const versionText     = document.getElementById('version-text');
+    const channelBadge    = document.getElementById('channel-badge');
+    const aiToggleBtn     = document.getElementById('ai-toggle-btn');
+    const aiToggleLabel   = document.getElementById('ai-toggle-label');
+    const aiDot           = document.getElementById('ai-dot');
+    const aiProgressPanel = document.getElementById('ai-progress-panel');
+    const aiProgressFill  = document.getElementById('ai-progress-fill');
+    const aiProgressLabel = document.getElementById('ai-progress-label');
+    const licenceModal    = document.getElementById('licence-modal');
+    const licenceBody     = document.getElementById('licence-body');
+
+    // ── Window controls ──────────────────────────────────────────────
+    document.getElementById('btn-close').addEventListener('click', () => window.launcher.close());
+    document.getElementById('btn-min').addEventListener('click',   () => window.launcher.minimize());
+
+    // ── External links ───────────────────────────────────────────────
+    document.getElementById('website-link').addEventListener('click', () =>
+      window.launcher.openUrl('https://www.primalonline.net'));
+    document.getElementById('discord-btn').addEventListener('click', () =>
+      window.launcher.openUrl('https://discord.gg/mDDB2Kfafa'));
+
+    // ── Channel selection ────────────────────────────────────────────
+    document.querySelectorAll('.ch-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const channel = btn.dataset.channel;
+        channelBadge.textContent = channel.toUpperCase() + ' BUILD';
+        channelScreen.style.display = 'none';
+        ui.style.display = 'flex';
+        window.launcher.selectChannel(channel);
+      });
+    });
+
+    // ── AI platform support check ─────────────────────────────────
+    // Hide the AI toggle entirely if phobos-lite has no build for this platform.
+    window.launcher.getAISupported().then(supported => {
+      if (!supported) {
+        document.getElementById('ai-toggle-wrap').style.display = 'none';
+      }
+    });
+
+    // ── State ────────────────────────────────────────────────────────
     let launcherState = 'loading'; // 'loading' | 'ready' | 'error'
 
-    function setPhase(phase, message, progress) {
-      statusText.textContent = message || '';
-
+    // ── Status handler ───────────────────────────────────────────────
+    window.launcher.onStatus(({ phase, message, progress, received, total, speed, eta }) => {
       switch (phase) {
         case 'check':
         case 'check-ai':
-          setProgress('indeterminate');
-          setButton('disabled', message || 'CHECKING');
+        case 'starting-ai':
+          setProgress('indeterminate', message, '');
+          setButton('disabled', 'CHECKING FOR UPDATES');
           break;
 
         case 'download-game':
-        case 'download-phobos':
-          setProgress(progress ?? 'indeterminate');
-          setButton('disabled', phase === 'download-game' ? 'DOWNLOADING' : 'LOADING AI');
+        case 'download-update':
+        case 'download-ai': {
+          const label = phase === 'download-ai' ? 'DOWNLOADING AI MODULE' : 'DOWNLOADING';
+          setButton('disabled', label);
+          if (typeof progress === 'number' && total) {
+            setProgress('value', `${received} / ${total} (${progress}%)`, eta || speed || '');
+            progressFill.style.width = progress + '%';
+            progressFill.classList.remove('indeterminate');
+          } else {
+            setProgress('indeterminate', message, '');
+          }
           break;
+        }
 
-        case 'starting-ai':
-          setProgress('indeterminate');
-          setButton('disabled', 'LOADING AI');
+        case 'extracting':
+          setProgress('value', 'Extracting files…', '');
+          progressFill.style.width = '100%';
+          progressFill.classList.remove('indeterminate');
+          setButton('disabled', 'EXTRACTING');
           break;
 
         case 'ready':
-          setProgress('hide');
-          statusText.textContent = '';
+          progressPanel.classList.remove('visible');
           setButton('ready', 'PLAY');
           launcherState = 'ready';
+          // Enable AI opt-in only once the game is confirmed installed
+          aiToggleBtn.disabled = false;
           break;
 
         case 'error':
-          setProgress('hide');
+          progressPanel.classList.remove('visible');
           setButton('error', 'RETRY');
           launcherState = 'error';
           break;
       }
-    }
+    });
 
-    function setProgress(state) {
-      if (state === 'hide') {
-        progressWrap.classList.remove('visible');
-        return;
-      }
-      progressWrap.classList.add('visible');
-      if (state === 'indeterminate') {
-        progressBar.classList.add('indeterminate');
-        progressBar.style.width = '';
-      } else {
-        progressBar.classList.remove('indeterminate');
-        progressBar.style.width = state + '%';
-      }
-    }
+    window.launcher.onAnnouncement(({ text }) => {
+      announcementText.textContent = text || getDefaultAnnouncement();
+    });
 
+    window.launcher.onVersion(({ version, channel }) => {
+      versionText.textContent   = 'Version ' + version;
+      channelBadge.textContent  = channel + ' BUILD';
+    });
+
+    // onAIReady handled above
+
+    // ── AI status handler ───────────────────────────────────────────
+    window.launcher.onAIStatus(({ phase, message, progress, received, total, speed, eta }) => {
+      switch (phase) {
+
+        case 'download-binary':
+        case 'download-model': {
+          aiProgressPanel.classList.add('visible');
+          aiToggleBtn.disabled = true;
+          const hasPct = typeof progress === 'number';
+          if (hasPct) {
+            aiProgressFill.classList.remove('indeterminate');
+            aiProgressFill.style.width = progress + '%';
+          } else {
+            aiProgressFill.classList.add('indeterminate');
+          }
+          // Label: "Downloading AI module…  460 MB / 622 MB (74%)  12s remaining"
+          let label = message || 'Downloading…';
+          if (received && total) label += `  ${received} / ${total}`;
+          if (hasPct)            label += ` (${progress}%)`;
+          if (eta)               label += `  ${eta}`;
+          aiProgressLabel.textContent = label;
+          break;
+        }
+
+        case 'starting':
+          aiProgressPanel.classList.add('visible');
+          aiProgressFill.classList.add('indeterminate');
+          aiProgressLabel.textContent = message || 'Starting AI engine…';
+          break;
+
+        case 'ready':
+          aiProgressPanel.classList.remove('visible');
+          aiToggleBtn.classList.add('active');
+          aiToggleBtn.disabled = true;
+          aiToggleLabel.textContent = 'Advanced AI Active';
+          break;
+
+        case 'error':
+          aiProgressPanel.classList.remove('visible');
+          aiToggleBtn.classList.add('error');
+          aiToggleBtn.disabled = false;
+          aiToggleLabel.textContent = 'AI Failed — Retry';
+          break;
+      }
+    });
+
+    window.launcher.onAIReady(({ model }) => {
+      aiToggleBtn.classList.add('active');
+      aiToggleBtn.disabled = true;
+      aiToggleLabel.textContent = 'AI Active · ' + model.replace(/-/g,' ').toUpperCase();
+    });
+
+    // ── AI toggle ────────────────────────────────────────────────────
+    aiToggleBtn.addEventListener('click', () => {
+      // Show licence modal before doing anything
+      licenceBody.textContent = GEMMA_LICENCE;
+      licenceModal.classList.add('open');
+    });
+
+    document.getElementById('licence-decline').addEventListener('click', () => {
+      licenceModal.classList.remove('open');
+    });
+
+    document.getElementById('licence-accept').addEventListener('click', () => {
+      licenceModal.classList.remove('open');
+      aiToggleBtn.disabled = true;
+      aiToggleLabel.textContent = 'Downloading AI…';
+      window.launcher.enableAI();
+    });
+
+    // ── Play button ──────────────────────────────────────────────────
+    playBtn.addEventListener('click', () => {
+      if (launcherState === 'ready') {
+        setButton('disabled', 'LAUNCHING…');
+        window.launcher.launch();
+      } else if (launcherState === 'error') {
+        launcherState = 'loading';
+        window.launcher.retry();
+      }
+    });
+
+    // ── Helpers ──────────────────────────────────────────────────────
     function setButton(state, label) {
       playBtn.textContent = label;
       playBtn.disabled    = state === 'disabled';
       playBtn.classList.toggle('error', state === 'error');
     }
 
-    // ── Main process callbacks ───────────────────────────────────────
-    window.launcher.onStatus(({ phase, message, progress }) => {
-      setPhase(phase, message, progress);
-    });
-
-    window.launcher.onAIReady(({ model }) => {
-      if (model) {
-        aiModelName.textContent = 'AI · ' + model.toUpperCase().replace(/-/g, ' ');
-        aiBadge.classList.add('visible');
+    function setProgress(type, statusMsg, speedMsg) {
+      progressPanel.classList.add('visible');
+      progressStatus.textContent = statusMsg;
+      progressSpeed.textContent  = speedMsg;
+      if (type === 'indeterminate') {
+        progressFill.classList.add('indeterminate');
+      } else {
+        progressFill.classList.remove('indeterminate');
       }
-    });
+    }
 
-    // ── Play button ─────────────────────────────────────────────────
-    playBtn.addEventListener('click', () => {
-      if (launcherState === 'ready') {
-        window.launcher.launch();
-        setButton('disabled', 'LAUNCHING…');
-      } else if (launcherState === 'error') {
-        launcherState = 'loading';
-        setPhase('check', 'Retrying…');
-        window.launcher.start();
-      }
-    });
-
-    // ── Boot ────────────────────────────────────────────────────────
-    window.launcher.start();
+    function getDefaultAnnouncement() {
+      return 'Greetings Alpha Testers!\n\nThank you for downloading Primal Online.\n\nPlease leave your feedback in the Discord!';
+    }
   </script>
 </body>
 </html>

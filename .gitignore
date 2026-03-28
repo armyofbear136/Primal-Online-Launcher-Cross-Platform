@@ -8,11 +8,13 @@ phobos-lite/dist/
 
 # Downloaded game files
 *.zip
-version.txt
+version-stable.txt
+version-experimental.txt
 phobos-provider.json
 Primal Online/
 
 # PHOBOS-Lite runtime
+phobos-lite/
 phobos-lite/models/
 phobos-lite/phobos.log
 phobos-lite/phobos-lite.exe

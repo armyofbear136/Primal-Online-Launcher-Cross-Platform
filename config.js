@@ -4,99 +4,143 @@
 'use strict';
 
 const path = require('path');
-const os = require('os');
+const os   = require('os');
 
-// ─── Game update URLs ────────────────────────────────────────────────────────
-const GAME_RELEASE_BASE = 'https://github.com/armyofbear136/Primal-Online-Client-Stable/releases/download/v0.0.2a-vn';
-const GAME_DOWNLOAD_BASE = 'https://github.com/armyofbear136/Primal-Online-Client-Stable/releases/download/v0.0.2a';
+// ─── Release channels ─────────────────────────────────────────────────────────
+// Add new channels here only. Nothing else needs to change.
+const CHANNELS = {
+  stable: {
+    id:              'stable',
+    label:           'STABLE',
+    releaseTag:      'PO-Alpha-Stable',
+    announcementUrl: 'https://docs.google.com/document/d/e/2PACX-1vSWep4BRMEMtogWTqLCFAuWktzJz77e-2T_XYxrnte12a4rHOEtN5S-L4Js78LyiheqMWRyxC1HwKZs/pub',
+    exeName: {
+      win32:  'PO_Alpha_Stable.exe',
+      darwin: 'PO_Alpha_Stable',
+      linux:  'PO_Alpha_Stable',
+    },
+    zipName: {
+      'win32-x64':   'PO_Alpha_Stable_PC_x64.zip',
+      'win32-arm64': 'PO_Alpha_Stable_PC_Arm.zip',
+      'linux-x64':   'PO_Alpha_Stable_Linux_x64.zip',
+      'linux-arm64': 'PO_Alpha_Stable_Linux_Arm.zip',
+      'darwin-x64':  'PO_Alpha_Stable_macOS.zip',
+      'darwin-arm64':'PO_Alpha_Stable_macOS.zip',
+    },
+  },
+  experimental: {
+    id:              'experimental',
+    label:           'EXPERIMENTAL',
+    releaseTag:      'PO-Alpha-Experimental',
+    announcementUrl: 'https://docs.google.com/document/d/e/2PACX-1vS9UGkDj5mcjoxTwaDZJZipbV_GyDMNxkFqJrgYWJOaE_BkyVIUkFydbfJrqKKtJ_IGcHom03YDKz4z/pub',
+    exeName: {
+      win32:  'PO_Alpha_Experimental.exe',
+      darwin: 'PO_Alpha_Experimental',
+      linux:  'PO_Alpha_Experimental',
+    },
+    zipName: {
+      'win32-x64':   'PO_Alpha_PC_x64_Experimental.zip',
+      'win32-arm64': 'PO_Alpha_PC_Arm_Experimental.zip',
+      'linux-x64':   'PO_Alpha_Linux_x64_Experimental.zip',
+      'linux-arm64': 'PO_Alpha_Linux_Arm_Experimental.zip',
+      'darwin-x64':  'PO_Alpha_macOS_Experimental.zip',
+      'darwin-arm64':'PO_Alpha_macOS_Experimental.zip',
+    },
+  },
+};
 
-exports.GAME_VERSION_URL  = `${GAME_RELEASE_BASE}/version.txt`;
-exports.GAME_DOWNLOAD_URL = `${GAME_DOWNLOAD_BASE}/PO_Alpha_Stable_PC.zip`;
+exports.CHANNELS = CHANNELS;
 
-// ─── Local filesystem paths ──────────────────────────────────────────────────
-// rootPath = directory where the launcher executable lives (or cwd in dev)
-const rootPath = process.env.PORTABLE_EXECUTABLE_DIR || process.cwd();
+// ─── Runtime paths (channel-dependent) ───────────────────────────────────────
+const rootPath   = process.env.PORTABLE_EXECUTABLE_DIR || process.cwd();
+const platformKey = `${process.platform}-${process.arch}`;
 
-exports.ROOT_PATH       = rootPath;
-exports.VERSION_FILE    = path.join(rootPath, 'version.txt');
-exports.GAME_ZIP        = path.join(rootPath, 'PO_Alpha_Stable_PC.zip');
-exports.GAME_DIR        = path.join(rootPath, 'Primal Online');
+exports.ROOT_PATH = rootPath;
 
-// Platform-aware game executable
-exports.GAME_EXE = (() => {
-  switch (process.platform) {
-    case 'win32':  return path.join(rootPath, 'Primal Online', 'PO_Alpha_Stable.exe');
-    case 'darwin': return path.join(rootPath, 'Primal Online', 'PO_Alpha_Stable.app', 'Contents', 'MacOS', 'PO_Alpha_Stable');
-    default:       return path.join(rootPath, 'Primal Online', 'PO_Alpha_Stable');
-  }
-})();
+exports.getChannelConfig = (channelId) => {
+  const ch = CHANNELS[channelId];
+  if (!ch) throw new Error(`Unknown channel: ${channelId}`);
 
-// ─── PHOBOS-Lite config ──────────────────────────────────────────────────────
-// Port PHOBOS-Lite will serve on. Written to phobos-provider.json for the game.
-exports.PHOBOS_PORT = 52690;
+  const GITHUB_BASE = `https://github.com/armyofbear136/Primal-Online-Client-Stable/releases/download/${ch.releaseTag}`;
+  const zipName     = ch.zipName[platformKey] || ch.zipName['win32-x64']; // safe fallback
+  const exeName     = ch.exeName[process.platform] || ch.exeName['linux'];
 
-// Health endpoint — PHOBOS-Lite exposes GET /health → { status: 'ok', model: '...' }
-exports.PHOBOS_HEALTH_URL = `http://127.0.0.1:${exports.PHOBOS_PORT}/health`;
+  return {
+    ...ch,
+    versionUrl:  `${GITHUB_BASE}/version.txt`,
+    downloadUrl: `${GITHUB_BASE}/${zipName}`,
+    zipName,
+    versionFile: path.join(rootPath, `version-${channelId}.txt`),
+    gameZip:     path.join(rootPath, zipName),
+    gameDir:     path.join(rootPath, 'Primal Online'),
+    gameExe:     path.join(rootPath, 'Primal Online', exeName),
+  };
+};
 
-// Provider config file — game reads this at startup
+// ─── Static URLs ──────────────────────────────────────────────────────────────
+exports.DISCORD_URL = 'https://discord.gg/mDDB2Kfafa';
+exports.WEBSITE_URL = 'https://www.primalonline.net';
+
+// ─── PHOBOS-Lite ─────────────────────────────────────────────────────────────
+exports.PHOBOS_PORT          = 52690;
+exports.PHOBOS_HEALTH_URL    = `http://127.0.0.1:52690/health`;
 exports.PHOBOS_PROVIDER_FILE = path.join(rootPath, 'phobos-provider.json');
+exports.PHOBOS_DIR           = path.join(rootPath, 'phobos-lite');
+exports.PHOBOS_BINARY        = process.platform === 'win32'
+  ? path.join(rootPath, 'phobos-lite', 'phobos-lite.exe')
+  : path.join(rootPath, 'phobos-lite', 'phobos-lite');
+exports.PHOBOS_VERSION_FILE  = path.join(rootPath, 'phobos-lite', 'version.txt');
 
-// PHOBOS-Lite binary name per platform
-exports.PHOBOS_BINARY = (() => {
-  switch (process.platform) {
-    case 'win32':  return path.join(rootPath, 'phobos-lite', 'phobos-lite.exe');
-    case 'darwin': return path.join(rootPath, 'phobos-lite', 'phobos-lite');
-    default:       return path.join(rootPath, 'phobos-lite', 'phobos-lite');
-  }
+// GitHub release — generic asset names, version tracked via version.txt sibling
+const PHOBOS_RELEASE_BASE    = 'https://github.com/armyofbear136/PHOBOS-BUILDS/releases/download/PHOBOS-LITE-LATEST/';
+exports.PHOBOS_VERSION_URL   = `${PHOBOS_RELEASE_BASE}/version.txt`;
+exports.PHOBOS_ZIP_URL       = (() => {
+  const { platform, arch } = process;
+  // Asset names match the phobos-core build output exactly
+  if (platform === 'win32'  && arch === 'x64')   return `${PHOBOS_RELEASE_BASE}/phobos-lite-win32-x64.zip`;
+  if (platform === 'win32'  && arch === 'arm64') return `${PHOBOS_RELEASE_BASE}/phobos-lite-win32-arm64.zip`;
+  if (platform === 'linux'  && arch === 'x64')   return `${PHOBOS_RELEASE_BASE}/phobos-lite-linux-x64.zip`;
+  if (platform === 'linux'  && arch === 'arm64') return `${PHOBOS_RELEASE_BASE}/phobos-lite-linux-arm64.zip`;
+  if (platform === 'darwin' && arch === 'arm64') return `${PHOBOS_RELEASE_BASE}/phobos-lite-darwin-arm64.zip`;
+  if (platform === 'darwin' && arch === 'x64')   return `${PHOBOS_RELEASE_BASE}/phobos-lite-darwin-x64.zip`;
+  return null;  // unsupported platform — AI opt-in will be hidden
 })();
-
-// PHOBOS-Lite model download base (Hugging Face or Autarch CDN — change as needed)
-exports.PHOBOS_MODEL_BASE_URL = 'https://huggingface.co/autarch-industries/primal-online-models/resolve/main';
-
-// ─── PHOBOS-Lite model catalogue ─────────────────────────────────────────────
-//
-// Selection logic (applied by phobos-lite at startup, not the launcher):
-//   1. Enumerate hardware devices, exclude the primary game GPU
-//   2. Find highest-scoring available device (CUDA > Metal > Vulkan > CPU)
-//   3. Walk catalogue top-to-bottom, pick first model whose minVramMB fits
-//
-// The launcher only needs this catalogue to drive the download step and to
-// know what to tell the user. phobos-lite does its own hardware probe at
-// runtime and may override if the initial pick fails.
-//
-// vramClass values: 'gpu-high' | 'gpu-mid' | 'gpu-low' | 'igpu' | 'cpu'
-// These correspond to phobos-lite's hardware scoring tiers.
+exports.PHOBOS_ZIP_NAME      = `phobos-lite-${process.platform}-${process.arch}.zip`;
 
 exports.PHOBOS_MODEL_CATALOGUE = [
   {
-    id: 'gemma-3-4b-it-q4',
-    displayName: 'Gemma 3 4B (Q4_K_M)',
-    filename: 'gemma-3-4b-it-q4_k_m.gguf',
-    minVramMB: 3200,
-    vramClass: 'gpu-mid',
+    id:            'gemma-3-4b-it-q4',
+    displayName:   'Gemma 3 4B (Q4_K_M)',
+    filename:      'gemma-3-4b-it-q4_k_m.gguf',
+    hfRepo:        'google/gemma-3-4b-it-GGUF',
+    hfFile:        'gemma-3-4b-it-q4_k_m.gguf',
+    minVramMB:     3200,
     contextLength: 8192,
-    description: 'Primary model — best quality/speed for dedicated iGPU or secondary GPU',
+    ngl:           35,
   },
   {
-    id: 'gemma-3-1b-it-q8',
-    displayName: 'Gemma 3 1B (Q8)',
-    filename: 'gemma-3-1b-it-q8_0.gguf',
-    minVramMB: 1400,
-    vramClass: 'igpu',
+    id:            'gemma-3-1b-it-q8',
+    displayName:   'Gemma 3 1B (Q8)',
+    filename:      'gemma-3-1b-it-q8_0.gguf',
+    hfRepo:        'google/gemma-3-1b-it-GGUF',
+    hfFile:        'gemma-3-1b-it-q8_0.gguf',
+    minVramMB:     1400,
     contextLength: 4096,
-    description: 'Fallback — runs on integrated graphics or weak secondary GPU',
+    ngl:           28,
   },
   {
-    id: 'gemma-3-1b-it-q4',
-    displayName: 'Gemma 3 1B (Q4_K_M)',
-    filename: 'gemma-3-1b-it-q4_k_m.gguf',
-    minVramMB: 0,
-    vramClass: 'cpu',
+    id:            'gemma-3-1b-it-q4',
+    displayName:   'Gemma 3 1B (Q4_K_M)',
+    filename:      'gemma-3-1b-it-q4_k_m.gguf',
+    hfRepo:        'google/gemma-3-1b-it-GGUF',
+    hfFile:        'gemma-3-1b-it-q4_k_m.gguf',
+    minVramMB:     0,
     contextLength: 4096,
-    description: 'CPU fallback — always runnable, lower quality',
+    ngl:           0,
   },
 ];
 
-// How long to wait for PHOBOS health check before giving up (ms)
-exports.PHOBOS_HEALTH_TIMEOUT_MS = 60_000;
-exports.PHOBOS_HEALTH_POLL_MS    = 1_000;
+// Model download can take several minutes on slow connections.
+// 30 minutes is generous but safe — user can always close the launcher.
+exports.PHOBOS_HEALTH_TIMEOUT_MS = 30 * 60 * 1_000;
+exports.PHOBOS_HEALTH_POLL_MS    = 1_500;
