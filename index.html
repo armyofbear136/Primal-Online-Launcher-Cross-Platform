@@ -5,737 +5,510 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; script-src 'self' 'unsafe-inline';" />
   <title>Primal Online Launcher</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Rajdhani:wght@300;400;500&display=swap');
-
+    @import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700;900&family=Cinzel:wght@400;600;700&family=Rajdhani:wght@300;400;500&display=swap');
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
     :root {
-      --gold:       #c9a84c;
-      --gold-dim:   #7a6028;
-      --red:        #8B0000;
-      --red-bright: #A52A2A;
-      --blue-glow:  #aee3f1;
-      --dark:       #050310;
-      --overlay:    rgba(0,0,0,0.2);
-      --panel-bg:   rgba(0,0,0,0.53);
-      --panel-border: #8B0000;
-      --text:       #CCC5B8;
-      --text-dim:   #8a7a60;
+      --red: #8B0000; --red-mid: #A52A2A; --red-bright: #c0392b;
+      --ai: #aee3f1; --ai-dim: #3a5a6a;
+      --dark: #050310; --panel: rgba(0,0,0,0.53); --text: #CCC5B8; --text-dim: #7a6a5a;
     }
+    html, body { width:100%; height:100%; overflow:hidden; background:var(--dark); font-family:'Consolas',monospace; color:var(--text); user-select:none; }
+    #bg { position:fixed; inset:0; background-image:url('assets/launcherbg.png'); background-size:cover; background-position:center top; }
+    #bg::after { content:''; position:absolute; inset:0; background:rgba(0,0,0,0.2); }
+    #titlebar { position:fixed; top:0; left:0; right:0; height:32px; display:flex; align-items:center; justify-content:flex-end; padding:0 10px; -webkit-app-region:drag; z-index:100; }
+    #win-controls { display:flex; gap:8px; -webkit-app-region:no-drag; }
+    #win-controls button { width:13px; height:13px; border-radius:50%; border:none; cursor:pointer; font-size:8px; color:transparent; transition:color .15s; }
+    #win-controls button:hover { color:rgba(0,0,0,0.6); }
+    #btn-min { background:#c9a84c; } #btn-close { background:#8B0000; }
 
-    html, body {
-      width: 100%; height: 100%;
-      overflow: hidden;
-      background: var(--dark);
-      font-family: 'Consolas', monospace;
-      color: var(--text);
-      user-select: none;
-    }
-
-    /* ── Background ─────────────────────────────────── */
-    #bg {
-      position: fixed; inset: 0;
-      background-image: url('assets/launcherbg.png');
-      background-size: cover;
-      background-position: center top;
-    }
-    #bg::after {
-      content: '';
-      position: absolute; inset: 0;
-      background: var(--overlay);
-    }
-
-    /* ── Titlebar ────────────────────────────────────── */
-    #titlebar {
-      position: fixed; top: 0; left: 0; right: 0;
-      height: 32px;
-      display: flex; align-items: center; justify-content: flex-end;
-      padding: 0 10px;
-      -webkit-app-region: drag;
-      z-index: 100;
-    }
-    #win-controls {
-      display: flex; gap: 8px;
-      -webkit-app-region: no-drag;
-    }
-    #win-controls button {
-      width: 13px; height: 13px;
-      border-radius: 50%; border: none; cursor: pointer;
-      font-size: 8px; font-weight: bold; color: transparent;
-      transition: color 0.15s;
-    }
-    #win-controls button:hover { color: rgba(0,0,0,0.6); }
-    #btn-min   { background: #c9a84c; }
-    #btn-close { background: #8B0000; }
-
-    /* ── Main layout ─────────────────────────────────── */
-    #ui {
-      position: fixed; inset: 0;
-      display: flex; flex-direction: column;
-      padding: 40px;
-    }
-
-    /* ── Title ───────────────────────────────────────── */
+    /* Layout */
+    #ui { position:fixed; inset:0; display:flex; flex-direction:column; padding:40px 40px 0 40px; }
     #title {
-      font-family: 'Impact', sans-serif;
-      font-size: 52px;
-      font-weight: bold;
-      color: #B8A68E;
-      text-shadow: 4px 4px 8px rgba(0,0,0,0.9);
-      margin-bottom: 10px;
-      flex-shrink: 0;
+      font-family:'Cinzel Decorative','Cinzel',serif;
+      font-size:42px; font-weight:900; color:#C8B898;
+      letter-spacing:4px;
+      text-shadow:
+        0 0 6px rgba(200,170,120,0.4),
+        0 0 20px rgba(180,130,60,0.25),
+        0 0 40px rgba(139,0,0,0.15),
+        3px 3px 6px rgba(0,0,0,0.9);
+      margin-bottom:10px; flex-shrink:0;
     }
+    #content-row { display:flex; gap:14px; flex:1; min-height:0; margin-bottom:10px; }
 
-    /* ── Channel picker (shown on first load) ────────── */
-    #channel-screen {
-      position: fixed; inset: 0;
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      gap: 24px;
-      z-index: 50;
-      background: rgba(5,3,16,0.7);
-    }
-    #channel-screen h2 {
-      font-family: 'Cinzel', serif;
-      font-size: 14px;
-      letter-spacing: 0.3em;
-      color: var(--text-dim);
-      text-transform: uppercase;
-    }
-    #channel-btns {
-      display: flex; gap: 24px;
-    }
-    .ch-btn {
-      width: 220px; height: 70px;
-      background: var(--panel-bg);
-      border: 1px solid var(--panel-border);
-      color: var(--text);
-      font-family: 'Consolas', monospace;
-      font-size: 15px;
-      letter-spacing: 0.15em;
-      cursor: pointer;
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      gap: 4px;
-      transition: background 0.2s, border-color 0.2s;
-    }
-    .ch-btn:hover { background: rgba(0,0,0,0.7); border-color: var(--red-bright); }
-    .ch-btn span.sub {
-      font-size: 10px;
-      color: var(--text-dim);
-      letter-spacing: 0.1em;
-    }
-    .ch-btn.experimental span.sub { color: var(--red); }
+    /* Announcement */
+    #announcement { flex:1; min-width:0; background:var(--panel); border:1px solid var(--red); box-shadow:0 0 20px rgba(139,0,0,0.4); padding:20px; overflow-y:auto; }
+    #announcement::-webkit-scrollbar { width:5px; } #announcement::-webkit-scrollbar-thumb { background:var(--red); border-radius:3px; }
+    #announcement-text { font-size:15px; line-height:1.6; white-space:pre-wrap; }
 
-    /* ── Announcement panel ──────────────────────────── */
-    #announcement {
-      flex: 1;
-      background: var(--panel-bg);
-      border: 1px solid var(--panel-border);
-      box-shadow: 0 0 20px rgba(139,0,0,0.4);
-      padding: 20px;
-      overflow-y: auto;
-      margin-bottom: 10px;
+    /* ── PHOBOS AI Column — terminal aesthetic matching PHOBOS Core launcher ── */
+    /* palette: #00ff00 green, #ffaa00 amber, #ff3333 red, black bg, Consolas font */
+    #ai-column {
+      width:240px; flex-shrink:0; display:flex; flex-direction:column;
+      background:rgba(0,0,0,0.82); border:1px solid #1a4a1a;
+      box-shadow:0 0 24px rgba(0,255,0,0.06), inset 0 0 40px rgba(0,0,0,0.4);
     }
-    #announcement-text {
-      font-size: 15px;
-      line-height: 1.6;
-      white-space: pre-wrap;
-      color: var(--text);
+    /* scanline overlay */
+    #ai-column::before {
+      content:''; position:absolute; inset:0; pointer-events:none;
+      background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.04) 2px,rgba(0,0,0,0.04) 4px);
+      z-index:1;
     }
-    /* Custom scrollbar */
-    #announcement::-webkit-scrollbar { width: 6px; }
-    #announcement::-webkit-scrollbar-track { background: transparent; }
-    #announcement::-webkit-scrollbar-thumb { background: var(--red); border-radius: 3px; }
+    #ai-column > * { position:relative; z-index:2; }
 
-    /* ── Progress panel ──────────────────────────────── */
-    #progress-panel {
-      background: var(--panel-bg);
-      border: 1px solid var(--panel-border);
-      box-shadow: 0 0 20px rgba(139,0,0,0.4);
-      padding: 20px;
-      margin-bottom: 20px;
-      display: none;
+    #ai-col-hdr {
+      padding:10px 12px 9px; border-bottom:1px solid #1a4a1a;
+      font-family:'Consolas','Courier New',monospace; font-size:11px;
+      letter-spacing:.25em; color:#00ff00;
+      text-shadow:0 0 8px rgba(0,255,0,0.4);
+      display:flex; align-items:center; gap:8px; flex-shrink:0;
     }
-    #progress-panel.visible { display: block; }
-    #progress-bar-track {
-      width: 100%; height: 25px;
-      background: #1a1a1a;
-      border: 1px solid #4a4a4a;
-    }
-    #progress-bar-fill {
-      height: 100%;
-      width: 0%;
-      background: var(--red);
-      transition: width 0.3s ease-out;
-    }
-    #progress-bar-fill.indeterminate {
-      width: 30% !important;
-      animation: sweep 1.4s ease-in-out infinite;
-    }
-    @keyframes sweep {
-      0%   { margin-left: -30%; }
-      100% { margin-left: 100%; }
-    }
-    #progress-labels {
-      display: flex; justify-content: space-between;
-      margin-top: 12px;
-      font-size: 13px; color: var(--text);
-    }
+    #ai-hdr-dot { width:7px; height:7px; border-radius:50%; background:#1a4a1a; transition:background .5s; flex-shrink:0; }
+    #ai-hdr-dot.active { background:#00ff00; box-shadow:0 0 6px rgba(0,255,0,0.8); animation:gpulse 2s infinite; }
+    #ai-hdr-dot.prog   { background:#ffaa00; box-shadow:0 0 6px rgba(255,170,0,0.8); animation:gpulse 1.2s infinite; }
+    #ai-hdr-dot.error  { background:#ff3333; box-shadow:0 0 6px rgba(255,51,51,0.8); }
+    @keyframes gpulse { 0%,100%{opacity:1} 50%{opacity:.25} }
 
-    /* ── Bottom bar ──────────────────────────────────── */
-    #bottom-bar {
-      display: flex; align-items: center;
-      flex-shrink: 0;
+    /* Image + status section — takes up most of the column */
+    #ai-status-sec {
+      padding:12px 12px 10px; border-bottom:1px solid #0d2a0d;
+      flex:1; display:flex; flex-direction:column;
     }
-    /* Left: website link */
-    #website-link {
-      flex: 1;
-      font-size: 14px;
-      color: #B8A68E;
-      text-decoration: underline;
-      cursor: pointer;
+    #ai-img {
+      width:100%; flex:1; min-height:0; max-height:160px;
+      object-fit:contain; display:block; margin-bottom:10px;
+      opacity:.95; filter:drop-shadow(0 0 12px rgba(0,255,0,0.2));
     }
-    #website-link:hover { color: var(--text); }
+    #ai-lbl {
+      font-family:'Consolas','Courier New',monospace;
+      font-size:13px; letter-spacing:.2em; color:#4a8a4a;
+      text-transform:uppercase; margin-bottom:4px; font-weight:bold;
+    }
+    #ai-lbl.active { color:#00ff00; text-shadow:0 0 12px rgba(0,255,0,0.7), 0 0 24px rgba(0,255,0,0.3); font-size:15px; }
+    #ai-lbl.prog   { color:#ffaa00; text-shadow:0 0 8px rgba(255,170,0,0.5); }
+    #ai-lbl.error  { color:#ff3333; text-shadow:0 0 8px rgba(255,51,51,0.5); }
+    .ai-pill { font-size:10px; letter-spacing:.06em; color:#5a9a5a; line-height:1.5; margin-top:3px; font-family:'Consolas','Courier New',monospace; }
+    .ai-pill span { color:#88cc88; }
 
-    /* Center: play button */
-    #play-wrap {
-      flex: 0 0 auto;
-      margin: 0 auto;
-      margin-bottom: -30px;
-    }
-    #play-btn {
-      width: 320px; height: 55px;
-      background: #1a0000;
-      border: 2px solid var(--red);
-      color: var(--text);
-      font-family: 'Consolas', monospace;
-      font-size: 18px;
-      letter-spacing: 0.1em;
-      cursor: pointer;
-      box-shadow: 0 0 25px rgba(139,0,0,0.6);
-      transition: background 0.2s, border-color 0.2s;
-    }
-    #play-btn:hover:not(:disabled) { background: #2a0000; border-color: var(--red-bright); }
-    #play-btn:disabled { opacity: 0.5; cursor: default; }
-    #play-btn.error { border-color: #c0392b; color: #e74c3c; }
+    /* Progress bar */
+    #ai-prog { display:none; margin-top:8px; }
+    #ai-prog.on { display:block; }
+    #ai-prog-track { width:100%; height:3px; background:rgba(0,255,0,0.06); }
+    #ai-prog-fill { height:100%; width:0%; background:#00ff00; transition:width .4s ease-out; box-shadow:0 0 4px rgba(0,255,0,0.6); }
+    #ai-prog-fill.ind { width:35%!important; animation:sweep 1.6s ease-in-out infinite; }
+    @keyframes sweep { 0%{margin-left:-35%} 100%{margin-left:100%} }
+    #ai-prog-lbl { font-size:10px; color:#5a9a5a; margin-top:4px; line-height:1.4; font-family:'Consolas','Courier New',monospace; }
 
-    /* Right: version + channel + discord */
-    #right-info {
-      flex: 1;
-      display: flex; flex-direction: column;
-      align-items: flex-end; gap: 4px;
+    /* Phobos Core ad */
+    #ai-ad-sec { padding:10px 12px; border-bottom:1px solid #0d2a0d; flex-shrink:0; }
+    .ai-promo-row {
+      display:flex; align-items:center; gap:8px; margin-bottom:6px;
     }
-    #version-text { font-size: 14px; color: var(--text); }
-    #channel-badge {
-      font-size: 11px; font-weight: bold;
-      color: var(--red);
-      letter-spacing: 0.1em;
+    .ai-promo-icon {
+      width:16px; height:16px; flex-shrink:0; opacity:0.7;
     }
-    #discord-btn {
-      display: flex; align-items: center; gap: 8px;
-      height: 40px; padding: 0 16px;
-      background: #1a0000;
-      border: 2px solid var(--red);
-      color: var(--text);
-      font-family: 'Consolas', monospace;
-      font-size: 14px;
-      cursor: pointer;
-      box-shadow: 0 0 15px rgba(139,0,0,0.4);
-      transition: background 0.2s, border-color 0.2s;
-      margin-top: 6px;
+    .ai-promo-text {
+      font-size:10px; line-height:1.4; color:#5a8a5a;
+      font-family:'Consolas','Courier New',monospace;
     }
-    #discord-btn:hover { background: #2a0000; border-color: var(--red-bright); }
-    #discord-icon {
-      width: 20px; height: 20px;
-      /* Inline Discord logo as SVG so we don't need an image file */
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 127.14 96.36'%3E%3Cpath fill='%23CCC5B8' d='M107.7 8.07A105.15 105.15 0 0 0 81.47 0a72.06 72.06 0 0 0-3.36 6.83 97.68 97.68 0 0 0-29.11 0A72.37 72.37 0 0 0 45.64 0a105.89 105.89 0 0 0-26.25 8.09C2.79 32.65-1.71 56.6.54 80.21a105.73 105.73 0 0 0 32.17 16.15 77.7 77.7 0 0 0 6.89-11.11 68.42 68.42 0 0 1-10.85-5.18c.91-.66 1.8-1.34 2.66-2a75.57 75.57 0 0 0 64.32 0c.87.71 1.76 1.39 2.66 2a68.68 68.68 0 0 1-10.87 5.19 77 77 0 0 0 6.89 11.1 105.25 105.25 0 0 0 32.19-16.14c2.64-27.38-4.51-51.11-18.9-72.15ZM42.45 65.69C36.18 65.69 31 60 31 53s5-12.74 11.43-12.74S54 46 53.89 53s-5.05 12.69-11.44 12.69Zm42.24 0C78.41 65.69 73.25 60 73.25 53s5-12.74 11.44-12.74S96.23 46 96.12 53s-5.04 12.69-11.43 12.69Z'/%3E%3C/svg%3E");
-      background-size: contain;
-      background-repeat: no-repeat;
-      background-position: center;
-      flex-shrink: 0;
+    #ai-ad-cta {
+      display:flex; align-items:center; gap:6px; margin-top:8px; padding:6px 10px;
+      background:rgba(0,255,0,0.03); border:1px solid rgba(0,255,0,0.12);
+      cursor:pointer; transition:all 0.3s;
     }
+    #ai-ad-cta:hover {
+      background:rgba(0,255,0,0.07); border-color:rgba(0,255,0,0.3);
+      box-shadow:0 0 12px rgba(0,255,0,0.1), inset 0 0 12px rgba(0,255,0,0.03);
+    }
+    #ai-ad-cta .cta-icon {
+      width:14px; height:14px; flex-shrink:0; opacity:0.8;
+    }
+    #ai-ad-cta .cta-label {
+      font-size:10px; letter-spacing:1.5px; color:#66cc66;
+      font-family:'Consolas','Courier New',monospace; text-transform:uppercase;
+      transition:color 0.3s, text-shadow 0.3s;
+    }
+    #ai-ad-cta:hover .cta-label {
+      color:#00ff00; text-shadow:0 0 8px rgba(0,255,0,0.5);
+    }
+    #ai-ad-cta .cta-arrow {
+      margin-left:auto; font-size:11px; color:#336633; transition:color 0.3s;
+    }
+    #ai-ad-cta:hover .cta-arrow { color:#00ff00; }
 
-    /* ── AI toggle button ────────────────────────────────── */
-    #ai-toggle-wrap {
-      display: flex; align-items: center; gap: 10px;
-      margin-top: 8px;
-    }
-    #ai-toggle-btn {
-      display: flex; align-items: center; gap: 8px;
-      padding: 6px 14px;
-      background: #0d0d1a;
-      border: 1px solid #2a2a4a;
-      color: #6a7a9a;
-      font-family: 'Consolas', monospace;
-      font-size: 12px;
-      letter-spacing: 0.08em;
-      cursor: pointer;
-      transition: border-color 0.2s, color 0.2s, background 0.2s;
-      white-space: nowrap;
-    }
-    #ai-toggle-btn:hover:not(:disabled) {
-      border-color: #aee3f1;
-      color: #aee3f1;
-      background: #0d1520;
-    }
-    #ai-toggle-btn:disabled {
-      opacity: 0.4; cursor: default;
-    }
-    #ai-toggle-btn.active {
-      border-color: rgba(174,227,241,0.4);
-      color: #aee3f1;
-      background: #0d1520;
-    }
-    #ai-toggle-btn.error {
-      border-color: rgba(139,0,0,0.6);
-      color: #c0392b;
-    }
-    #ai-dot {
-      width: 6px; height: 6px; border-radius: 50%;
-      background: #2a2a4a;
-      transition: background 0.3s;
-      flex-shrink: 0;
-    }
-    #ai-toggle-btn.active  #ai-dot { background: #aee3f1; animation: pulse 2s infinite; }
-    #ai-toggle-btn.error   #ai-dot { background: #c0392b; }
-    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+    /* Action section */
+    #ai-act-sec { padding:10px 12px 12px; display:flex; flex-direction:column; gap:9px; flex-shrink:0; }
 
-    /* ── AI progress bar (reuses same track style) ────── */
-    #ai-progress-panel {
-      background: var(--panel-bg);
-      border: 1px solid #1a2a3a;
-      padding: 14px 20px;
-      margin-bottom: 8px;
-      display: none;
+    /* Auto-launch checkbox */
+    #ai-auto-row { display:none; align-items:center; gap:7px; }
+    #ai-auto-cb {
+      appearance:none; width:12px; height:12px;
+      border:1px solid #336633; background:transparent;
+      cursor:pointer; position:relative; flex-shrink:0; transition:border-color .2s;
     }
-    #ai-progress-panel.visible { display: block; }
-    #ai-progress-track {
-      width: 100%; height: 6px;
-      background: #1a1a2a;
-      border: 1px solid #2a2a4a;
+    #ai-auto-cb:checked { border-color:#00ff00; background:rgba(0,255,0,0.08); }
+    #ai-auto-cb:checked::after {
+      content:''; position:absolute; left:2px; top:0px; width:6px; height:9px;
+      border:1px solid #00ff00; border-top:none; border-left:none; transform:rotate(45deg);
     }
-    #ai-progress-fill {
-      height: 100%; width: 0%;
-      background: #aee3f1;
-      transition: width 0.3s ease-out;
-    }
-    #ai-progress-fill.indeterminate {
-      width: 30% !important;
-      animation: sweep 1.4s ease-in-out infinite;
-    }
-    #ai-progress-label {
-      margin-top: 6px;
-      font-size: 11px;
-      color: #6a8aaa;
-      letter-spacing: 0.08em;
-    }
+    #ai-auto-cb:disabled { opacity:.25; cursor:default; }
+    #ai-auto-lbl { font-size:10px; letter-spacing:.08em; color:#66bb66; cursor:pointer; font-family:'Consolas','Courier New',monospace; }
 
-    /* ── Licence modal ───────────────────────────────────── */
-    #licence-modal {
-      display: none;
-      position: fixed; inset: 0;
-      background: rgba(5,3,16,0.88);
-      z-index: 200;
-      align-items: center; justify-content: center;
+    /* CTA button */
+    #ai-cta {
+      width:100%; padding:9px 0;
+      background:transparent; border:1px solid #2a5a2a;
+      color:#4a7a4a; font-family:'Consolas','Courier New',monospace;
+      font-size:10px; letter-spacing:.2em; text-transform:uppercase;
+      cursor:pointer; transition:all .25s;
     }
-    #licence-modal.open { display: flex; }
-    #licence-box {
-      width: 680px;
-      background: #0a0818;
-      border: 1px solid #1a2a3a;
-      box-shadow: 0 0 40px rgba(174,227,241,0.06);
-      display: flex; flex-direction: column;
-      max-height: 70vh;
+    #ai-cta.avail {
+      border-color:#00ff00; color:#00ff00;
+      text-shadow:0 0 8px rgba(0,255,0,0.4);
+      box-shadow:0 0 12px rgba(0,255,0,0.08);
+      animation:ctap 3s ease-in-out infinite;
     }
-    #licence-header {
-      padding: 18px 24px 14px;
-      border-bottom: 1px solid #1a2a3a;
-      font-family: 'Cinzel', serif;
-      font-size: 12px;
-      letter-spacing: 0.25em;
-      color: #aee3f1;
+    @keyframes ctap {
+      0%,100%{box-shadow:0 0 12px rgba(0,255,0,0.08)}
+      50%{box-shadow:0 0 24px rgba(0,255,0,0.22); text-shadow:0 0 12px rgba(0,255,0,0.7)}
     }
-    #licence-body {
-      padding: 20px 24px;
-      overflow-y: auto;
-      flex: 1;
-      font-size: 12px;
-      line-height: 1.7;
-      color: #8a9aaa;
-      white-space: pre-wrap;
-    }
-    #licence-body::-webkit-scrollbar { width: 4px; }
-    #licence-body::-webkit-scrollbar-thumb { background: #1a2a3a; }
-    #licence-footer {
-      padding: 16px 24px;
-      border-top: 1px solid #1a2a3a;
-      display: flex; justify-content: flex-end; gap: 12px;
-    }
-    .licence-btn {
-      padding: 8px 22px;
-      font-family: 'Consolas', monospace;
-      font-size: 12px;
-      letter-spacing: 0.1em;
-      cursor: pointer;
-      border: 1px solid;
-      background: transparent;
-    }
-    #licence-decline {
-      border-color: #2a2a3a; color: #4a4a6a;
-    }
-    #licence-decline:hover { border-color: #4a4a6a; color: #8a8aaa; }
-    #licence-accept {
-      border-color: #aee3f1; color: #aee3f1;
-    }
-    #licence-accept:hover { background: rgba(174,227,241,0.08); }
+    #ai-cta.active { border-color:#336633; color:#00cc44; text-shadow:0 0 6px rgba(0,204,68,0.4); animation:none; cursor:default; }
+    #ai-cta.error  { border-color:#ff3333; color:#ff3333; text-shadow:0 0 6px rgba(255,51,51,0.4); animation:none; }
+    #ai-cta:disabled:not(.avail):not(.error) { opacity:.3; cursor:default; animation:none; }
+
+    /* Game progress */
+    #game-prog { background:var(--panel); border:1px solid var(--red); box-shadow:0 0 20px rgba(139,0,0,.4); padding:16px 20px; margin-bottom:10px; display:none; flex-shrink:0; }
+    #game-prog.on { display:block; }
+    #gp-track { width:100%; height:25px; background:#1a1a1a; border:1px solid #4a4a4a; }
+    #gp-fill { height:100%; width:0%; background:var(--red); transition:width .3s ease-out; }
+    #gp-fill.ind { width:30%!important; animation:sweep 1.4s ease-in-out infinite; }
+    #gp-labels { display:flex; justify-content:space-between; margin-top:10px; font-size:13px; }
+
+    /* Bottom */
+    #bottom { display:flex; align-items:center; flex-shrink:0; padding-bottom:10px; }
+    #web-lnk { flex:1; font-size:14px; color:#B8A68E; text-decoration:underline; cursor:pointer; }
+    #web-lnk:hover { color:var(--text); }
+    #play-wrap { flex:0 0 auto; margin:0 auto; margin-bottom:-30px; }
+    #play-btn { width:320px; height:55px; background:#1a0000; border:2px solid var(--red); color:var(--text); font-family:'Consolas',monospace; font-size:18px; letter-spacing:.1em; cursor:pointer; box-shadow:0 0 25px rgba(139,0,0,.6); transition:background .2s,border-color .2s; }
+    #play-btn:hover:not(:disabled) { background:#2a0000; border-color:var(--red-mid); }
+    #play-btn:disabled { opacity:.5; cursor:default; }
+    #play-btn.err    { border-color:var(--red-bright); color:#e74c3c; }
+    #play-btn.prompt { border-color:#c9a84c; color:#c9a84c; box-shadow:0 0 20px rgba(201,168,76,0.25); animation:goldpulse 2.5s ease-in-out infinite; }
+    @keyframes goldpulse { 0%,100%{box-shadow:0 0 20px rgba(201,168,76,0.25)} 50%{box-shadow:0 0 35px rgba(201,168,76,0.5)} }
+    #r-info { flex:1; display:flex; flex-direction:column; align-items:flex-end; gap:4px; }
+    #ver-txt { font-size:14px; }
+    #ch-badge { font-size:11px; font-weight:bold; color:var(--red); letter-spacing:.1em; }
+    #discord { display:flex; align-items:center; gap:8px; height:40px; padding:0 16px; background:#1a0000; border:2px solid var(--red); color:var(--text); font-family:'Consolas',monospace; font-size:14px; cursor:pointer; box-shadow:0 0 15px rgba(139,0,0,.4); transition:background .2s,border-color .2s; margin-top:6px; }
+    #discord:hover { background:#2a0000; border-color:var(--red-mid); }
+    #dico { width:20px; height:20px; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 127.14 96.36'%3E%3Cpath fill='%23CCC5B8' d='M107.7 8.07A105.15 105.15 0 0 0 81.47 0a72.06 72.06 0 0 0-3.36 6.83 97.68 97.68 0 0 0-29.11 0A72.37 72.37 0 0 0 45.64 0a105.89 105.89 0 0 0-26.25 8.09C2.79 32.65-1.71 56.6.54 80.21a105.73 105.73 0 0 0 32.17 16.15 77.7 77.7 0 0 0 6.89-11.11 68.42 68.42 0 0 1-10.85-5.18c.91-.66 1.8-1.34 2.66-2a75.57 75.57 0 0 0 64.32 0c.87.71 1.76 1.39 2.66 2a68.68 68.68 0 0 1-10.87 5.19 77 77 0 0 0 6.89 11.1 105.25 105.25 0 0 0 32.19-16.14c2.64-27.38-4.51-51.11-18.9-72.15ZM42.45 65.69C36.18 65.69 31 60 31 53s5-12.74 11.43-12.74S54 46 53.89 53s-5.05 12.69-11.44 12.69Zm42.24 0C78.41 65.69 73.25 60 73.25 53s5-12.74 11.44-12.74S96.23 46 96.12 53s-5.04 12.69-11.43 12.69Z'/%3E%3C/svg%3E"); background-size:contain; background-repeat:no-repeat; background-position:center; flex-shrink:0; }
+
+    /* Channel picker */
+    #ch-screen { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:24px; z-index:50; background:rgba(5,3,16,.75); }
+    #ch-screen h2 { font-family:'Cinzel',serif; font-size:14px; letter-spacing:.3em; color:var(--text-dim); text-transform:uppercase; }
+    #ch-btns { display:flex; gap:24px; }
+    .ch-btn { width:220px; height:70px; background:var(--panel); border:1px solid var(--red); color:var(--text); font-family:'Consolas',monospace; font-size:15px; letter-spacing:.15em; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; transition:background .2s,border-color .2s; }
+    .ch-btn:hover { background:rgba(0,0,0,.7); border-color:var(--red-mid); }
+    .ch-btn span { font-size:10px; color:var(--text-dim); letter-spacing:.1em; }
+    .ch-btn.exp span { color:var(--red); }
+
+    /* Licence */
+    #lic-modal { display:none; position:fixed; inset:0; background:rgba(5,3,16,.88); z-index:200; align-items:center; justify-content:center; }
+    #lic-modal.open { display:flex; }
+    #lic-box { width:680px; background:#0a0818; border:1px solid #1a2a3a; box-shadow:0 0 40px rgba(174,227,241,.06); display:flex; flex-direction:column; max-height:70vh; }
+    #lic-hdr { padding:18px 24px 14px; border-bottom:1px solid #1a2a3a; font-family:'Cinzel',serif; font-size:12px; letter-spacing:.25em; color:var(--ai); }
+    #lic-body { padding:20px 24px; overflow-y:auto; flex:1; font-size:12px; line-height:1.7; color:#8a9aaa; white-space:pre-wrap; }
+    #lic-body::-webkit-scrollbar { width:4px; } #lic-body::-webkit-scrollbar-thumb { background:#1a2a3a; }
+    #lic-foot { padding:16px 24px; border-top:1px solid #1a2a3a; display:flex; justify-content:flex-end; gap:12px; }
+    .lic-btn { padding:8px 22px; font-family:'Consolas',monospace; font-size:12px; letter-spacing:.1em; cursor:pointer; border:1px solid; background:transparent; }
+    #lic-no  { border-color:#2a2a3a; color:#4a4a6a; } #lic-no:hover  { border-color:#4a4a6a; color:#8a8aaa; }
+    #lic-yes { border-color:var(--ai); color:var(--ai); }   #lic-yes:hover { background:rgba(174,227,241,.08); }
   </style>
 </head>
 <body>
-
   <div id="bg"></div>
 
   <div id="titlebar">
     <div id="win-controls">
-      <button id="btn-min"   title="Minimize">–</button>
-      <button id="btn-close" title="Close">✕</button>
+      <button id="btn-min">–</button>
+      <button id="btn-close">✕</button>
     </div>
   </div>
 
-  <!-- Channel picker — shown until user picks stable or experimental -->
-  <div id="channel-screen">
+  <!-- Channel picker -->
+  <div id="ch-screen">
     <h2>Select Build Channel</h2>
-    <div id="channel-btns">
-      <button class="ch-btn" data-channel="stable">
-        STABLE
-        <span class="sub">Recommended · well-tested</span>
-      </button>
-      <button class="ch-btn experimental" data-channel="experimental">
-        EXPERIMENTAL
-        <span class="sub">Latest features · may be unstable</span>
-      </button>
+    <div id="ch-btns">
+      <button class="ch-btn" data-ch="stable">STABLE<span>Recommended · well-tested</span></button>
+      <button class="ch-btn exp" data-ch="experimental">EXPERIMENTAL<span>Latest features · may be unstable</span></button>
     </div>
   </div>
 
-  <!-- Main launcher UI — hidden until channel is chosen -->
-  <div id="ui" style="display:none;">
-
+  <!-- Main UI -->
+  <div id="ui" style="display:none">
     <div id="title">PRIMAL ONLINE</div>
 
-    <!-- Announcement -->
-    <div id="announcement">
-      <div id="announcement-text">Loading announcement…</div>
+    <div id="content-row">
+      <!-- Announcement -->
+      <div id="announcement"><div id="announcement-text">Loading announcement…</div></div>
+
+      <!-- PHOBOS AI column -->
+      <div id="ai-column">
+        <div id="ai-col-hdr"><div id="ai-hdr-dot"></div>PHOBOS AI</div>
+
+        <div id="ai-status-sec">
+          <img id="ai-img" src="assets/ai-state-unavailable.png" alt="" onerror="this.style.display='none'" />
+          <div id="ai-lbl">Not Installed</div>
+          <div id="ai-pill-dev" class="ai-pill" style="display:none">Device <span id="ai-dev">—</span></div>
+          <div id="ai-pill-mod" class="ai-pill" style="display:none">Model <span id="ai-mod">—</span></div>
+          <div id="ai-prog">
+            <div id="ai-prog-track"><div id="ai-prog-fill"></div></div>
+            <div id="ai-prog-lbl"></div>
+          </div>
+        </div>
+
+        <div id="ai-ad-sec">
+          <div class="ai-promo-row">
+            <svg class="ai-promo-icon" viewBox="0 0 24 24" fill="none" stroke="#5a8a5a" stroke-width="1.5"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+            <div class="ai-promo-text">Already have PHOBOS Core? It connects automatically.</div>
+          </div>
+          <div class="ai-promo-row">
+            <svg class="ai-promo-icon" viewBox="0 0 24 24" fill="none" stroke="#5a8a5a" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            <div class="ai-promo-text">PHOBOS CORE is a 100% local AI Workstation. The best of AI that never leaves your machine.</div>
+          </div>
+          <div id="ai-ad-cta">
+            <svg class="cta-icon" viewBox="0 0 24 24" fill="none" stroke="#66cc66" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>
+            <span class="cta-label">Get PHOBOS Core</span>
+            <span class="cta-arrow">→</span>
+          </div>
+        </div>
+
+        <div id="ai-act-sec">
+          <div id="ai-auto-row">
+            <input type="checkbox" id="ai-auto-cb" />
+            <label id="ai-auto-lbl" for="ai-auto-cb">Launch AI automatically</label>
+          </div>
+          <button id="ai-cta" disabled>ENABLE ADVANCED AI</button>
+        </div>
+      </div>
     </div>
 
-    <!-- Download progress -->
-    <div id="progress-panel">
-      <div id="progress-bar-track">
-        <div id="progress-bar-fill"></div>
-      </div>
-      <div id="progress-labels">
-        <span id="progress-status">Preparing…</span>
-        <span id="progress-speed"></span>
-      </div>
-    </div>
-
-    <!-- AI download progress (separate from game download) -->
-    <div id="ai-progress-panel">
-      <div id="ai-progress-track"><div id="ai-progress-fill"></div></div>
-      <div id="ai-progress-label">Initialising…</div>
+    <!-- Game download progress -->
+    <div id="game-prog">
+      <div id="gp-track"><div id="gp-fill"></div></div>
+      <div id="gp-labels"><span id="gp-status">Preparing…</span><span id="gp-speed"></span></div>
     </div>
 
     <!-- Bottom bar -->
-    <div id="bottom-bar">
-      <span id="website-link">primalonline.net</span>
-
-      <div id="play-wrap">
-        <button id="play-btn" disabled>CHECKING FOR UPDATES</button>
-      </div>
-
-      <div id="right-info">
-        <span id="version-text"></span>
-        <span id="channel-badge"></span>
-        <button id="discord-btn">
-          <div id="discord-icon"></div>
-          Discord
-        </button>
-
-        <!-- AI opt-in -->
-        <div id="ai-toggle-wrap">
-          <button id="ai-toggle-btn" disabled>
-            <div id="ai-dot"></div>
-            <span id="ai-toggle-label">Enable Advanced AI ~ 8 GB</span>
-          </button>
-        </div>
-
+    <div id="bottom">
+      <span id="web-lnk">primalonline.net</span>
+      <div id="play-wrap"><button id="play-btn" disabled>CHECKING FOR UPDATES</button></div>
+      <div id="r-info">
+        <span id="ver-txt"></span>
+        <span id="ch-badge"></span>
+        <button id="discord"><div id="dico"></div>Discord</button>
       </div>
     </div>
-
   </div>
 
   <!-- Licence modal -->
-  <div id="licence-modal">
-    <div id="licence-box">
-      <div id="licence-header">AI MODEL LICENCE AGREEMENT</div>
-      <div id="licence-body"></div>
-      <div id="licence-footer">
-        <button class="licence-btn" id="licence-decline">Decline</button>
-        <button class="licence-btn" id="licence-accept">Accept &amp; Download</button>
+  <div id="lic-modal">
+    <div id="lic-box">
+      <div id="lic-hdr">AI MODEL LICENCE AGREEMENT</div>
+      <div id="lic-body"></div>
+      <div id="lic-foot">
+        <button class="lic-btn" id="lic-no">Decline</button>
+        <button class="lic-btn" id="lic-yes">Accept &amp; Download</button>
       </div>
     </div>
   </div>
 
   <script>
-    // ── Gemma 3 licence text ─────────────────────────────────────────
-    // Source: https://ai.google.dev/gemma/terms
-    const GEMMA_LICENCE = `GEMMA TERMS OF USE
-Last Modified: February 21, 2025
+    const LLAMA_LICENCE = `LLAMA 3 COMMUNITY LICENCE AGREEMENT\nMeta Platforms, Inc.\n\nBy using Llama Materials you agree to these terms.\n\n1. LICENCE RIGHTS\nNon-exclusive, worldwide, royalty-free license to use, reproduce, and distribute Llama for any lawful purpose.\n\n2. ACCEPTABLE USE\nYou may not use Llama to violate laws, generate harmful content, develop weapons, or infringe IP rights.\n\n3. REDISTRIBUTION\nInclude this licence. Display "Built with Meta Llama 3" in related materials.\n\n4. DISCLAIMER\nProvided "AS IS" without warranties.\n\n5. LIMITATION OF LIABILITY\nMeta not liable for indirect or consequential damages.\n\nFull licence: https://llama.meta.com/llama3/license/`;
 
-By using, reproducing, modifying, distributing, performing or displaying any portion or element of Gemma, Model Derivatives or the Gemma Outputs, you agree to the terms of this Gemma Terms of Use ("Terms"). If you do not agree to these Terms, then you must not use Gemma.
+    // DOM
+    const $ = id => document.getElementById(id);
+    const chScreen=$('ch-screen'), ui=$('ui');
+    const annText=$('announcement-text'), gpPanel=$('game-prog'), gpFill=$('gp-fill'), gpStatus=$('gp-status'), gpSpeed=$('gp-speed');
+    const playBtn=$('play-btn'), verTxt=$('ver-txt'), chBadge=$('ch-badge');
+    const aiHdrDot=$('ai-hdr-dot'), aiImg=$('ai-img'), aiLbl=$('ai-lbl');
+    const aiPillDev=$('ai-pill-dev'), aiPillMod=$('ai-pill-mod'), aiDev=$('ai-dev'), aiMod=$('ai-mod');
+    const aiProg=$('ai-prog'), aiProgFill=$('ai-prog-fill'), aiProgLbl=$('ai-prog-lbl');
+    const aiAutoRow=$('ai-auto-row'), aiAutoCb=$('ai-auto-cb'), aiCta=$('ai-cta');
+    const licModal=$('lic-modal'), licBody=$('lic-body');
 
-1. DEFINITIONS
-"Gemma" means the set of machine learning language model weights identified as Gemma and made available by Google.
-"Model Derivatives" means any derivative works of Gemma or modifications thereof.
+    let launchState='loading', aiState='unavailable';
 
-2. USE RIGHTS
-Subject to the Terms, Google grants you a non-exclusive, worldwide, non-transferable, non-sublicensable, revocable, royalty free limited license to use, reproduce, distribute, copy, create derivative works of, and make modifications to Gemma for permitted purposes.
+    // Window controls
+    $('btn-close').onclick = () => window.launcher.close();
+    $('btn-min').onclick   = () => window.launcher.minimize();
+    $('web-lnk').onclick   = () => window.launcher.openUrl('https://www.primalonline.net');
+    $('discord').onclick   = () => window.launcher.openUrl('https://discord.gg/mDDB2Kfafa');
+    $('ai-ad-cta').onclick = () => window.launcher.openUrl('https://autarch.net/phobos');
 
-3. PERMITTED USES
-You may use Gemma for any lawful purpose, including commercial use, except those prohibited below.
+    // Channel picker
+    document.querySelectorAll('.ch-btn').forEach(b => b.addEventListener('click', () => {
+      chBadge.textContent = b.dataset.ch.toUpperCase() + ' BUILD';
+      chScreen.style.display = 'none';
+      ui.style.display = 'flex';
+      window.launcher.selectChannel(b.dataset.ch);
+    }));
 
-4. USAGE POLICIES
-You must not use Gemma or its outputs to:
-  a. Violate any applicable law or infringe any rights of third parties.
-  b. Generate content designed to deceive or harm individuals.
-  c. Build systems for surveillance that violates human rights.
-  d. Generate content that is unlawful, harmful, hateful, or discriminatory.
-
-5. DISTRIBUTION
-If you distribute Gemma or Model Derivatives, you must include a copy of these Terms and prominently display "Built with Gemma" in related materials.
-
-6. INTELLECTUAL PROPERTY
-Google retains all intellectual property rights in Gemma. These Terms do not grant any rights to Google's trademarks or logos.
-
-7. DISCLAIMER OF WARRANTIES
-GEMMA IS PROVIDED "AS IS" WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED.
-
-8. LIMITATION OF LIABILITY
-Google will not be liable for any damages arising from your use of Gemma.
-
-Full terms: https://ai.google.dev/gemma/terms`;
-
-    // ── DOM refs ─────────────────────────────────────────────────────
-    const channelScreen   = document.getElementById('channel-screen');
-    const ui              = document.getElementById('ui');
-    const announcementText= document.getElementById('announcement-text');
-    const progressPanel   = document.getElementById('progress-panel');
-    const progressFill    = document.getElementById('progress-bar-fill');
-    const progressStatus  = document.getElementById('progress-status');
-    const progressSpeed   = document.getElementById('progress-speed');
-    const playBtn         = document.getElementById('play-btn');
-    const versionText     = document.getElementById('version-text');
-    const channelBadge    = document.getElementById('channel-badge');
-    const aiToggleBtn     = document.getElementById('ai-toggle-btn');
-    const aiToggleLabel   = document.getElementById('ai-toggle-label');
-    const aiDot           = document.getElementById('ai-dot');
-    const aiProgressPanel = document.getElementById('ai-progress-panel');
-    const aiProgressFill  = document.getElementById('ai-progress-fill');
-    const aiProgressLabel = document.getElementById('ai-progress-label');
-    const licenceModal    = document.getElementById('licence-modal');
-    const licenceBody     = document.getElementById('licence-body');
-
-    // ── Window controls ──────────────────────────────────────────────
-    document.getElementById('btn-close').addEventListener('click', () => window.launcher.close());
-    document.getElementById('btn-min').addEventListener('click',   () => window.launcher.minimize());
-
-    // ── External links ───────────────────────────────────────────────
-    document.getElementById('website-link').addEventListener('click', () =>
-      window.launcher.openUrl('https://www.primalonline.net'));
-    document.getElementById('discord-btn').addEventListener('click', () =>
-      window.launcher.openUrl('https://discord.gg/mDDB2Kfafa'));
-
-    // ── Channel selection ────────────────────────────────────────────
-    document.querySelectorAll('.ch-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const channel = btn.dataset.channel;
-        channelBadge.textContent = channel.toUpperCase() + ' BUILD';
-        channelScreen.style.display = 'none';
-        ui.style.display = 'flex';
-        window.launcher.selectChannel(channel);
-      });
+    // Platform check — hide column if no build available
+    window.launcher.getAISupported().then(ok => {
+      if (!ok) $('ai-column').style.display = 'none';
     });
 
-    // ── AI platform support check ─────────────────────────────────
-    // Hide the AI toggle entirely if phobos-lite has no build for this platform.
-    window.launcher.getAISupported().then(supported => {
-      if (!supported) {
-        document.getElementById('ai-toggle-wrap').style.display = 'none';
-      }
-    });
+    // Prefs
+    window.launcher.getPrefs().then(applyPrefs);
+    window.launcher.onPrefs(applyPrefs);
+    function applyPrefs(p) {
+      if (p.aiInstalled) { setAIState('idle'); aiAutoRow.style.display='flex'; }
+      if (aiAutoCb) aiAutoCb.checked = p.autoLaunchAI !== false;
+    }
+    aiAutoCb.addEventListener('change', () => window.launcher.setPrefs({ autoLaunchAI: aiAutoCb.checked }));
 
-    // ── State ────────────────────────────────────────────────────────
-    let launcherState = 'loading'; // 'loading' | 'ready' | 'error'
+    // AI state configs: [label, dotClass, imgFile, ctaText, ctaClass, ctaDisabled]
+    const AI_CFG = {
+      unavailable: ['Not Installed',      '',      'ai-state-unavailable.png', 'ENABLE ADVANCED AI', 'avail', false],
+      idle:        ['Installed · Ready',  '',      'ai-state-idle.png',        'LAUNCH AI',          'avail', false],
+      downloading: ['Downloading…',       'prog',  'ai-state-downloading.png', 'DOWNLOADING…',       '',      true ],
+      starting:    ['Starting…',          'prog',  'ai-state-downloading.png', 'STARTING…',          '',      true ],
+      active:      ['AI Active',          'active','ai-state-active.png',      'AI ACTIVE',          'active',true ],
+      error:       ['Error',              'error', 'ai-state-error.png',       'RETRY',              'error', false],
+    };
 
-    // ── Status handler ───────────────────────────────────────────────
-    window.launcher.onStatus(({ phase, message, progress, received, total, speed, eta }) => {
-      switch (phase) {
+    function setAIState(s, lbl) {
+      aiState = s;
+      const [defLbl, dot, img, cta, ctaCls, ctaDis] = AI_CFG[s] || AI_CFG.unavailable;
+      aiImg.src = `assets/${img}`;
+      aiLbl.textContent = lbl || defLbl;
+      aiLbl.className = s === 'active' ? 'active' : s === 'error' ? 'error' : (s === 'downloading' || s === 'starting') ? 'prog' : '';
+      aiHdrDot.className = dot === 'active' ? 'active' : dot === 'error' ? 'error' : dot === 'prog' ? 'prog' : '';
+      aiCta.textContent = cta;
+      aiCta.className = ctaCls;
+      aiCta.disabled = ctaDis;
+    }
+
+    function setAIProg(pct, lbl, ind) {
+      aiProg.classList.add('on');
+      aiProgFill.className = ind ? 'ind' : '';
+      if (!ind) aiProgFill.style.width = pct + '%';
+      aiProgLbl.textContent = lbl || '';
+    }
+    function clearAIProg() {
+      aiProg.classList.remove('on');
+      aiProgFill.className = '';
+      aiProgFill.style.width = '0%';
+      aiProgLbl.textContent = '';
+    }
+    function progLbl(rx, tot, pct, eta) {
+      return [rx && tot ? `${rx} / ${tot}` : '', typeof pct==='number' ? `${pct}%` : '', eta||''].filter(Boolean).join('  ');
+    }
+
+    // Game status
+    let pendingVersion = null;
+    window.launcher.onStatus(({phase, message, progress, received, total, speed, eta, onlineVersion, localVersion}) => {
+      switch(phase) {
         case 'check':
-        case 'check-ai':
-        case 'starting-ai':
-          setProgress('indeterminate', message, '');
-          setButton('disabled', 'CHECKING FOR UPDATES');
+          gpPanel.classList.remove('on');
+          setBtn('disabled','CHECKING FOR UPDATES'); break;
+
+        case 'needs-install':
+          gpPanel.classList.remove('on');
+          // Show download prompt in play button
+          setBtn('prompt-install', 'DOWNLOAD GAME');
+          launchState = 'needs-install';
+          if (onlineVersion) pendingVersion = onlineVersion;
           break;
 
-        case 'download-game':
-        case 'download-update':
-        case 'download-ai': {
-          const label = phase === 'download-ai' ? 'DOWNLOADING AI MODULE' : 'DOWNLOADING';
-          setButton('disabled', label);
-          if (typeof progress === 'number' && total) {
-            setProgress('value', `${received} / ${total} (${progress}%)`, eta || speed || '');
-            progressFill.style.width = progress + '%';
-            progressFill.classList.remove('indeterminate');
-          } else {
-            setProgress('indeterminate', message, '');
-          }
+        case 'update-available':
+          gpPanel.classList.remove('on');
+          setBtn('prompt-update', 'UPDATE AVAILABLE — CLICK TO UPDATE');
+          launchState = 'update-available';
+          pendingVersion = onlineVersion;
           break;
-        }
+
+        case 'download-game': case 'download-update':
+          gpPanel.classList.add('on'); setBtn('disabled','DOWNLOADING');
+          if (typeof progress==='number') { gpFill.className=''; gpFill.style.width=progress+'%'; } else gpFill.className='ind';
+          gpStatus.textContent = received&&total ? `${received} / ${total} (${progress}%)` : message||'Downloading…';
+          gpSpeed.textContent = eta||speed||''; break;
 
         case 'extracting':
-          setProgress('value', 'Extracting files…', '');
-          progressFill.style.width = '100%';
-          progressFill.classList.remove('indeterminate');
-          setButton('disabled', 'EXTRACTING');
-          break;
+          gpPanel.classList.add('on'); gpFill.className=''; gpFill.style.width='100%';
+          gpStatus.textContent='Extracting…'; gpSpeed.textContent=''; setBtn('disabled','EXTRACTING'); break;
 
         case 'ready':
-          progressPanel.classList.remove('visible');
-          setButton('ready', 'PLAY');
-          launcherState = 'ready';
-          // Enable AI opt-in only once the game is confirmed installed
-          aiToggleBtn.disabled = false;
-          break;
+          gpPanel.classList.remove('on'); setBtn('ready','PLAY'); launchState='ready'; aiCta.disabled=false; break;
 
         case 'error':
-          progressPanel.classList.remove('visible');
-          setButton('error', 'RETRY');
-          launcherState = 'error';
-          break;
+          gpPanel.classList.remove('on'); setBtn('error','RETRY'); launchState='error'; break;
       }
     });
 
-    window.launcher.onAnnouncement(({ text }) => {
-      announcementText.textContent = text || getDefaultAnnouncement();
-    });
-
-    window.launcher.onVersion(({ version, channel }) => {
-      versionText.textContent   = 'Version ' + version;
-      channelBadge.textContent  = channel + ' BUILD';
-    });
-
-    // onAIReady handled above
-
-    // ── AI status handler ───────────────────────────────────────────
-    window.launcher.onAIStatus(({ phase, message, progress, received, total, speed, eta }) => {
-      switch (phase) {
-
+    // AI status
+    window.launcher.onAIStatus(({phase, message, progress, received, total, speed, eta, modelName}) => {
+      switch(phase) {
         case 'download-binary':
-        case 'download-model': {
-          aiProgressPanel.classList.add('visible');
-          aiToggleBtn.disabled = true;
-          const hasPct = typeof progress === 'number';
-          if (hasPct) {
-            aiProgressFill.classList.remove('indeterminate');
-            aiProgressFill.style.width = progress + '%';
-          } else {
-            aiProgressFill.classList.add('indeterminate');
-          }
-          // Label: "Downloading AI module…  460 MB / 622 MB (74%)  12s remaining"
-          let label = message || 'Downloading…';
-          if (received && total) label += `  ${received} / ${total}`;
-          if (hasPct)            label += ` (${progress}%)`;
-          if (eta)               label += `  ${eta}`;
-          aiProgressLabel.textContent = label;
-          break;
-        }
-
+          setAIState('downloading','Downloading AI Module…');
+          setAIProg(progress??0, progLbl(received,total,progress,eta), typeof progress!=='number'); break;
+        case 'download-model':
+          setAIState('downloading','Downloading Model…');
+          setAIProg(progress??0, progLbl(received,total,progress,eta), typeof progress!=='number');
+          if (modelName) { aiMod.textContent=modelName; aiPillMod.style.display=''; } break;
         case 'starting':
-          aiProgressPanel.classList.add('visible');
-          aiProgressFill.classList.add('indeterminate');
-          aiProgressLabel.textContent = message || 'Starting AI engine…';
-          break;
-
+          setAIState('starting', message||'Starting AI engine…');
+          setAIProg(0, message||'Starting…', true); break;
         case 'ready':
-          aiProgressPanel.classList.remove('visible');
-          aiToggleBtn.classList.add('active');
-          aiToggleBtn.disabled = true;
-          aiToggleLabel.textContent = 'Advanced AI Active';
-          break;
-
+          clearAIProg(); setAIState('active');
+          aiAutoRow.style.display='flex'; break;
         case 'error':
-          aiProgressPanel.classList.remove('visible');
-          aiToggleBtn.classList.add('error');
-          aiToggleBtn.disabled = false;
-          aiToggleLabel.textContent = 'AI Failed — Retry';
-          break;
+          clearAIProg(); setAIState('error', message||'Failed'); break;
       }
     });
 
-    window.launcher.onAIReady(({ model }) => {
-      aiToggleBtn.classList.add('active');
-      aiToggleBtn.disabled = true;
-      aiToggleLabel.textContent = 'AI Active · ' + model.replace(/-/g,' ').toUpperCase();
+    window.launcher.onAIReady(({model, device}) => {
+      clearAIProg(); setAIState('active');
+      if (device) { aiDev.textContent=device; aiPillDev.style.display=''; }
+      if (model)  { aiMod.textContent=model;  aiPillMod.style.display=''; }
     });
 
-    // ── AI toggle ────────────────────────────────────────────────────
-    aiToggleBtn.addEventListener('click', () => {
-      // Show licence modal before doing anything
-      licenceBody.textContent = GEMMA_LICENCE;
-      licenceModal.classList.add('open');
-    });
+    window.launcher.onAnnouncement(({text}) => { annText.textContent = text || 'Greetings Alpha Testers!\n\nThank you for downloading Primal Online.\n\nPlease leave your feedback in the Discord!'; });
+    window.launcher.onVersion(({version, channel}) => { verTxt.textContent='Version '+version; chBadge.textContent=channel+' BUILD'; });
 
-    document.getElementById('licence-decline').addEventListener('click', () => {
-      licenceModal.classList.remove('open');
+    // AI CTA
+    aiCta.addEventListener('click', () => {
+      if (aiState==='active') return;
+      if (aiState==='idle' || aiState==='error') { window.launcher.enableAI(); return; }
+      licBody.textContent = LLAMA_LICENCE;
+      licModal.classList.add('open');
     });
-
-    document.getElementById('licence-accept').addEventListener('click', () => {
-      licenceModal.classList.remove('open');
-      aiToggleBtn.disabled = true;
-      aiToggleLabel.textContent = 'Downloading AI…';
+    $('lic-no').onclick  = () => licModal.classList.remove('open');
+    $('lic-yes').onclick = () => {
+      licModal.classList.remove('open');
+      setAIState('downloading','Starting download…');
       window.launcher.enableAI();
-    });
+    };
 
-    // ── Play button ──────────────────────────────────────────────────
+    // Play
     playBtn.addEventListener('click', () => {
-      if (launcherState === 'ready') {
-        setButton('disabled', 'LAUNCHING…');
-        window.launcher.launch();
-      } else if (launcherState === 'error') {
-        launcherState = 'loading';
-        window.launcher.retry();
+      if (launchState==='ready') {
+        setBtn('disabled','LAUNCHING…'); window.launcher.launch();
+      } else if (launchState==='error') {
+        launchState='loading'; window.launcher.retry();
+      } else if (launchState==='needs-install' || launchState==='update-available') {
+        launchState='downloading';
+        window.launcher.downloadGame();
       }
     });
 
-    // ── Helpers ──────────────────────────────────────────────────────
-    function setButton(state, label) {
-      playBtn.textContent = label;
-      playBtn.disabled    = state === 'disabled';
-      playBtn.classList.toggle('error', state === 'error');
-    }
-
-    function setProgress(type, statusMsg, speedMsg) {
-      progressPanel.classList.add('visible');
-      progressStatus.textContent = statusMsg;
-      progressSpeed.textContent  = speedMsg;
-      if (type === 'indeterminate') {
-        progressFill.classList.add('indeterminate');
-      } else {
-        progressFill.classList.remove('indeterminate');
-      }
-    }
-
-    function getDefaultAnnouncement() {
-      return 'Greetings Alpha Testers!\n\nThank you for downloading Primal Online.\n\nPlease leave your feedback in the Discord!';
+    function setBtn(s, lbl) {
+      playBtn.textContent = lbl;
+      playBtn.disabled    = (s === 'disabled');
+      playBtn.classList.remove('err','prompt');
+      if (s === 'error')          playBtn.classList.add('err');
+      if (s === 'prompt-install') playBtn.classList.add('prompt');
+      if (s === 'prompt-update')  playBtn.classList.add('prompt');
     }
   </script>
 </body>

@@ -4,6 +4,7 @@ phobos-lite/node_modules/
 
 # Build output
 dist/
+dist-all/
 phobos-lite/dist/
 
 # Downloaded game files
@@ -12,6 +13,8 @@ version-stable.txt
 version-experimental.txt
 phobos-provider.json
 Primal Online/
+
+launcher-prefs.json
 
 # PHOBOS-Lite runtime
 phobos-lite/

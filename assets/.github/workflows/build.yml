@@ -1,0 +1,129 @@
+name: Build Primal Online Launcher
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      release:
+        description: 'Create a GitHub Release after build'
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.runner }}
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label:    win32-x64
+            runner:   windows-latest
+            cmd:      build:win
+
+          - label:    darwin-universal
+            runner:   macos-14
+            cmd:      build:mac
+
+          - label:    linux-x64
+            runner:   ubuntu-latest
+            cmd:      build:linux
+
+          - label:    linux-arm64
+            runner:   ubuntu-24.04-arm
+            cmd:      build:linux
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run ${{ matrix.cmd }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: List dist
+        run: ls -la dist/
+        shell: bash
+
+      - name: Upload dist
+        uses: actions/upload-artifact@v6
+        with:
+          name: launcher-${{ matrix.label }}
+          path: |
+            dist/*.exe
+            dist/*.dmg
+            dist/*.AppImage
+          if-no-files-found: warn
+          retention-days: 7
+
+  collect:
+    name: Collect dist-all
+    needs: build
+    runs-on: ubuntu-latest
+    if: always()
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v7
+        with:
+          path: dist-all
+        continue-on-error: true
+
+      - name: Flatten into dist-all
+        run: |
+          mkdir -p flat
+          find dist-all -type f \( -name "*.exe" -o -name "*.dmg" -o -name "*.AppImage" \) -exec cp {} flat/ \;
+          ls -la flat/
+        shell: bash
+
+      - name: Upload dist-all
+        uses: actions/upload-artifact@v6
+        with:
+          name: dist-all
+          path: flat/*
+          retention-days: 7
+
+  release:
+    name: Create Release
+    needs: collect
+    runs-on: ubuntu-latest
+    if: |
+      always() &&
+      (startsWith(github.ref, 'refs/tags/v') ||
+       (github.event_name == 'workflow_dispatch' && inputs.release))
+    permissions:
+      contents: write
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - name: Download dist-all
+        uses: actions/download-artifact@v7
+        with:
+          name: dist-all
+          path: release-files
+        continue-on-error: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name:               ${{ github.ref_name }}
+          name:                   Primal Online Launcher ${{ github.ref_name }}
+          draft:                  false
+          prerelease:             false
+          generate_release_notes: true
+          files:                  release-files/*
+          fail_on_unmatched_files: false

@@ -78,8 +78,13 @@ exports.getChannelConfig = (channelId) => {
 };
 
 // ─── Static URLs ──────────────────────────────────────────────────────────────
-exports.DISCORD_URL = 'https://discord.gg/mDDB2Kfafa';
-exports.WEBSITE_URL = 'https://www.primalonline.net';
+exports.DISCORD_URL  = 'https://discord.gg/mDDB2Kfafa';
+exports.WEBSITE_URL  = 'https://www.primalonline.net';
+exports.PHOBOS_URL   = 'https://autarch.net/phobos';
+
+// ─── Launcher preferences file ────────────────────────────────────────────────
+// Persists user choices across sessions (auto-launch AI, etc.)
+exports.PREFS_FILE   = path.join(rootPath, 'launcher-prefs.json');
 
 // ─── PHOBOS-Lite ─────────────────────────────────────────────────────────────
 exports.PHOBOS_PORT          = 52690;
@@ -92,7 +97,7 @@ exports.PHOBOS_BINARY        = process.platform === 'win32'
 exports.PHOBOS_VERSION_FILE  = path.join(rootPath, 'phobos-lite', 'version.txt');
 
 // GitHub release — generic asset names, version tracked via version.txt sibling
-const PHOBOS_RELEASE_BASE    = 'https://github.com/armyofbear136/PHOBOS-BUILDS/releases/download/PHOBOS-LITE-LATEST/';
+const PHOBOS_RELEASE_BASE    = 'https://github.com/armyofbear136/PHOBOS-BUILDS/releases/download/PHOBOS-LITE-LATEST';
 exports.PHOBOS_VERSION_URL   = `${PHOBOS_RELEASE_BASE}/version.txt`;
 exports.PHOBOS_ZIP_URL       = (() => {
   const { platform, arch } = process;

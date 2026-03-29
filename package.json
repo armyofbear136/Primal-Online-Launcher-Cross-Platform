@@ -2,22 +2,25 @@
   "name": "po-launcher",
   "version": "1.0.0",
   "description": "Primal Online Game Launcher",
+  "author": {
+    "name": "Autarch Industries",
+    "email": "dev@autarch.net"
+  },
   "main": "main.js",
   "scripts": {
-    "start": "electron .",
     "dev": "electron . --dev",
-    "build:win": "electron-builder --win",
-    "build:linux": "electron-builder --linux",
-    "build:mac": "electron-builder --mac",
-    "build:all": "electron-builder --win --linux --mac"
+    "build": "electron-builder --publish never",
+    "build:win": "electron-builder --win --publish never",
+    "build:mac": "electron-builder --mac --publish never",
+    "build:linux": "electron-builder --linux --publish never",
+    "build:all": "node build.all.mjs"
   },
   "dependencies": {
-    "adm-zip": "^0.5.16",
-    "node-fetch": "^3.3.2"
+    "adm-zip": "^0.5.16"
   },
   "devDependencies": {
-    "electron": "^31.7.7",
-    "electron-builder": "^24.13.3"
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
   },
   "build": {
     "appId": "com.autarch.primal-online-launcher",
@@ -35,59 +38,25 @@
       "assets/**/*",
       "package.json"
     ],
-    "extraResources": [
-      {
-        "from": "assets/bg.png",
-        "to": "assets/bg.png"
-      }
-    ],
     "win": {
-      "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        }
-      ],
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
       "icon": "assets/icon.ico"
     },
     "linux": {
       "target": [
-        {
-          "target": "AppImage",
-          "arch": [
-            "x64"
-          ]
-        },
-        {
-          "target": "deb",
-          "arch": [
-            "x64"
-          ]
-        }
+        { "target": "AppImage", "arch": ["x64"] }
       ],
       "icon": "assets/icon.png",
       "category": "Game"
     },
     "mac": {
-      "target": [
-        {
-          "target": "dmg",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
-        }
-      ],
+      "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }],
       "icon": "assets/icon.icns",
       "category": "public.app-category.games"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "installerIcon": "assets/icon.ico",
-      "installerHeaderIcon": "assets/icon.ico",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
     }

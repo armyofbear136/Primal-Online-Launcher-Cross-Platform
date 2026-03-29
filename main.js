@@ -100,6 +100,30 @@ ipcMain.handle('game:launch', () => {
   });
 });
 
+// ─── Game download (user-initiated) ──────────────────────────────────────────
+ipcMain.handle('launcher:downloadGame', async () => {
+  try {
+    await downloadGame();
+    // Game is now installed/updated — run AI auto-launch if configured
+    const prefs = readPrefs();
+    if (prefs.autoLaunchAI && fs.existsSync(cfg.PHOBOS_BINARY)) {
+      setImmediate(async () => {
+        try {
+          send('ai-status', { phase: 'starting', message: 'Auto-starting AI engine…' });
+          await ensurePhobosLite();
+          await startPhobos();
+        } catch (err) {
+          log(`Auto-launch AI failed: ${err.message}`);
+          writeProviderFile(null);
+          send('ai-status', { phase: 'error', message: err.message });
+        }
+      });
+    }
+  } catch (err) {
+    send('status', { phase: 'error', message: err.message });
+  }
+});
+
 // ─── AI platform support query ───────────────────────────────────────────────
 ipcMain.handle('launcher:aiSupported', () => cfg.PHOBOS_ZIP_URL !== null);
 
@@ -114,6 +138,14 @@ ipcMain.handle('launcher:enableAI', async () => {
     send('ai-status', { phase: 'starting', message: 'Starting AI engine…' });
     await startPhobos();
 
+    // First successful install — default auto-launch to true
+    const prefs = readPrefs();
+    if (prefs.autoLaunchAI === undefined) {
+      writePrefs({ autoLaunchAI: true, aiInstalled: true });
+      send('prefs', readPrefs());
+    } else {
+      writePrefs({ aiInstalled: true });
+    }
     send('ai-status', { phase: 'ready' });
   } catch (err) {
     console.warn('[PHOBOS] Enable AI failed:', err.message);
@@ -134,19 +166,54 @@ function log(msg) {
   console.log(`[${ts}] ${msg}`);
 }
 
+// ─── Preferences ─────────────────────────────────────────────────────────────
+// Flat JSON file: { autoLaunchAI: bool, aiInstalled: bool }
+// Defaults: autoLaunchAI=true once AI is first installed, false before.
+
+function readPrefs() {
+  try { return JSON.parse(fs.readFileSync(cfg.PREFS_FILE, 'utf8')); }
+  catch { return {}; }
+}
+
+function writePrefs(patch) {
+  const current = readPrefs();
+  const next    = { ...current, ...patch };
+  fs.writeFileSync(cfg.PREFS_FILE, JSON.stringify(next, null, 2), 'utf8');
+  return next;
+}
+
+ipcMain.handle('prefs:get', () => readPrefs());
+ipcMain.handle('prefs:set', (_, patch) => writePrefs(patch));
+
 // ─── Launch sequence ──────────────────────────────────────────────────────────
 async function runLaunchSequence() {
   // 1. Fetch announcement (non-blocking — fire and forget to renderer)
   fetchAnnouncement(activeChannel.announcementUrl);
 
-  // 2. Check / download game
+  // 2. Check version only — never auto-downloads. User must confirm.
   send('status', { phase: 'check', message: 'Checking for updates…' });
-  await ensureGame();
+  await checkGame();
 
-  // PHOBOS-Lite is opt-in — not started here.
-  // Player enables it via the UI toggle; launcher:enableAI handles download + start.
-  writeProviderFile(null);
-  send('status', { phase: 'ready', message: '' });
+  // Auto-launch AI if user previously opted in and the binary is installed.
+  // This runs when the game is already up to date (checkGame sent phase:'ready').
+  // When checkGame sends 'needs-install' or 'update-available', the renderer shows
+  // a prompt; user triggers launcher:downloadGame which has its own auto-launch path.
+  const prefs = readPrefs();
+  if (prefs.autoLaunchAI && fs.existsSync(cfg.PHOBOS_BINARY)) {
+    setImmediate(async () => {
+      try {
+        send('ai-status', { phase: 'starting', message: 'Auto-starting AI engine…' });
+        await ensurePhobosLite();
+        await startPhobos();
+      } catch (err) {
+        log(`Auto-launch AI failed: ${err.message}`);
+        writeProviderFile(null);
+        send('ai-status', { phase: 'error', message: err.message });
+      }
+    });
+  } else {
+    writeProviderFile(null);
+  }
 }
 
 // ─── Announcement ─────────────────────────────────────────────────────────────
@@ -196,53 +263,81 @@ function extractTextFromHtml(html) {
 }
 
 // ─── Game update ──────────────────────────────────────────────────────────────
-async function ensureGame() {
-  const { versionFile, versionUrl, downloadUrl, gameZip, gameExe } = activeChannel;
+// checkGame: check version only — never auto-downloads. Tells renderer what's available.
+async function checkGame() {
+  const { versionFile, gameExe } = activeChannel;
 
   let localVersion = null;
   try { localVersion = fs.readFileSync(versionFile, 'utf8').trim(); } catch {}
 
   let onlineVersion = null;
   try {
-    onlineVersion = (await fetchText(versionUrl)).trim();
+    onlineVersion = (await fetchText(activeChannel.versionUrl)).trim();
   } catch {
-    // Offline — if game exists, proceed
-    if (fs.existsSync(gameExe)) return;
-    throw new Error('No network connection and no local game installation found.');
+    // Offline
+    if (fs.existsSync(gameExe)) {
+      send('version', { version: localVersion, channel: activeChannel.label });
+      send('status', { phase: 'ready', message: '' });
+    } else {
+      send('status', { phase: 'needs-install', message: 'No internet connection. Game not installed.' });
+    }
+    return;
   }
 
-  send('version', { version: onlineVersion, channel: activeChannel.label });
+  send('version', { version: localVersion || onlineVersion, channel: activeChannel.label });
 
-  if (localVersion === onlineVersion && fs.existsSync(gameExe)) return;
+  if (localVersion === onlineVersion && fs.existsSync(gameExe)) {
+    // Up to date — go straight to ready
+    send('status', { phase: 'ready', message: '' });
+  } else if (localVersion && fs.existsSync(gameExe)) {
+    // Update available — prompt user
+    send('status', { phase: 'update-available', onlineVersion, localVersion });
+  } else {
+    // Not installed — prompt user
+    send('status', { phase: 'needs-install', onlineVersion });
+  }
+}
 
-  // Need download
+// downloadGame: called by user action (launcher:downloadGame IPC)
+async function downloadGame() {
+  const { versionFile, versionUrl, downloadUrl, gameZip, gameExe } = activeChannel;
+
+  let localVersion = null;
+  try { localVersion = fs.readFileSync(versionFile, 'utf8').trim(); } catch {}
+
+  let onlineVersion = null;
+  try { onlineVersion = (await fetchText(versionUrl)).trim(); } catch (err) {
+    send('status', { phase: 'error', message: `Version check failed: ${err.message}` }); return;
+  }
+
   const isUpdate = localVersion !== null && fs.existsSync(gameExe);
   send('status', {
-    phase:   isUpdate ? 'download-update' : 'download-game',
-    message: isUpdate ? 'Downloading update…' : 'Downloading game…',
+    phase:    isUpdate ? 'download-update' : 'download-game',
+    message:  isUpdate ? 'Downloading update…' : 'Downloading game…',
     progress: 0,
   });
 
-  await downloadFile(downloadUrl, gameZip, (progress, received, total, speed, eta) => {
-    send('status', {
-      phase:    isUpdate ? 'download-update' : 'download-game',
-      message:  isUpdate ? 'Downloading update…' : 'Downloading game…',
-      progress,
-      received: formatBytes(received),
-      total:    formatBytes(total),
-      speed:    formatBytes(speed) + '/s',
-      eta:      formatEta(eta),
+  try {
+    await downloadFile(downloadUrl, gameZip, (progress, received, total, speed, eta) => {
+      send('status', {
+        phase:    isUpdate ? 'download-update' : 'download-game',
+        message:  isUpdate ? 'Downloading update…' : 'Downloading game…',
+        progress,
+        received: formatBytes(received), total: formatBytes(total),
+        speed:    formatBytes(speed) + '/s', eta: formatEta(eta),
+      });
     });
-  });
 
-  send('status', { phase: 'extracting', message: 'Extracting…', progress: 100 });
-
-  const zip = new AdmZip(gameZip);
-  zip.extractAllTo(cfg.ROOT_PATH, true);
-  fs.unlinkSync(gameZip);
-  fs.writeFileSync(versionFile, onlineVersion, 'utf8');
-
-  send('version', { version: onlineVersion, channel: activeChannel.label });
+    send('status', { phase: 'extracting', message: 'Extracting…', progress: 100 });
+    const zip = new AdmZip(gameZip);
+    zip.extractAllTo(cfg.ROOT_PATH, true);
+    fs.unlinkSync(gameZip);
+    fs.writeFileSync(versionFile, onlineVersion, 'utf8');
+    send('version', { version: onlineVersion, channel: activeChannel.label });
+    send('status', { phase: 'ready', message: '' });
+  } catch (err) {
+    send('status', { phase: 'error', message: err.message });
+  }
 }
 
 // ─── PHOBOS-Lite ──────────────────────────────────────────────────────────────
