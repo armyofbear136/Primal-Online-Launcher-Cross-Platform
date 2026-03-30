@@ -74,40 +74,89 @@ ipcMain.handle("launcher:retry", async () => {
 
 // Launch the game — watch the game process so PHOBOS dies when the game does
 ipcMain.handle('game:launch', () => {
-  if (!activeChannel || !fs.existsSync(activeChannel.gameExe)) {
-    send('status', { phase: 'error', message: 'Game executable not found.' });
+  const gameExe = activeChannel?.gameExe;
+  const gameDir = activeChannel?.gameDir;
+
+  if (!activeChannel || !gameExe) {
+    send('status', { phase: 'error', message: 'No channel selected.' });
     return;
   }
 
-  // Keep the launcher process alive but hidden so we can watch the game
-  mainWindow?.hide();
+  // Log paths for debugging
+  console.log(`[Launch] gameExe: ${gameExe}`);
+  console.log(`[Launch] gameDir: ${gameDir}`);
+  console.log(`[Launch] exists: ${fs.existsSync(gameExe)}`);
+
+  if (!fs.existsSync(gameExe)) {
+    send('status', { phase: 'error', message: `Game executable not found at: ${gameExe}` });
+    return;
+  }
 
   let child;
   if (process.platform === 'darwin') {
-    // macOS: chmod the binary inside the .app bundle, then use 'open' to launch
-    // the .app directory (Gatekeeper/quarantine requires this)
-    try { fs.chmodSync(activeChannel.gameExe, 0o755); } catch {}
+    // macOS: chmod the binary and all executables in the .app bundle
+    try { fs.chmodSync(gameExe, 0o755); } catch (e) { console.log('[Launch] chmod failed:', e.message); }
+
     // Derive the .app path from the exe path (go up from Contents/MacOS/binary)
-    const appPath = activeChannel.gameExe.replace(/\/Contents\/MacOS\/[^/]+$/, '');
+    const appPath = gameExe.replace(/\/Contents\/MacOS\/[^/]+$/, '');
+    console.log(`[Launch] macOS appPath: ${appPath}`);
+    console.log(`[Launch] appPath exists: ${fs.existsSync(appPath)}`);
+
+    // Remove quarantine attribute (macOS blocks unsigned apps downloaded from internet)
+    try {
+      require('child_process').execSync(`xattr -rd com.apple.quarantine "${appPath}"`, { timeout: 5000 });
+      console.log('[Launch] Quarantine attribute removed');
+    } catch (e) { console.log('[Launch] xattr failed (may not be quarantined):', e.message); }
+
     child = spawn('open', ['-W', appPath], {
-      cwd: activeChannel.gameDir, detached: false, stdio: 'ignore',
+      cwd: gameDir, detached: false, stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    // Capture open's output for debugging
+    let openStdout = '', openStderr = '';
+    child.stdout?.on('data', (c) => { openStdout += c; });
+    child.stderr?.on('data', (c) => { openStderr += c; });
+
+    child.on('exit', (code) => {
+      console.log(`[Launch] open exited with code ${code}`);
+      if (openStdout) console.log(`[Launch] stdout: ${openStdout}`);
+      if (openStderr) console.log(`[Launch] stderr: ${openStderr}`);
+
+      if (code !== 0) {
+        // open failed — show error, don't quit
+        mainWindow?.show();
+        send('status', { phase: 'error', message: `Game failed to launch (code ${code}). ${openStderr}`.trim() });
+        return;
+      }
+      // Game closed normally
+      stopPhobos();
+      app.quit();
+    });
+
+    child.on('error', (err) => {
+      console.log(`[Launch] spawn error: ${err.message}`);
+      mainWindow?.show();
+      send('status', { phase: 'error', message: `Launch failed: ${err.message}` });
     });
   } else {
-    child = spawn(activeChannel.gameExe, [], {
-      cwd: activeChannel.gameDir, detached: false, stdio: 'ignore',
+    // Windows/Linux: direct spawn
+    // Keep the launcher process alive but hidden so we can watch the game
+    mainWindow?.hide();
+
+    child = spawn(gameExe, [], {
+      cwd: gameDir, detached: false, stdio: 'ignore',
+    });
+
+    child.on('exit', () => {
+      stopPhobos();
+      app.quit();
+    });
+
+    child.on('error', (err) => {
+      mainWindow?.show();
+      send('status', { phase: 'error', message: `Launch failed: ${err.message}` });
     });
   }
-
-  child.on('exit', () => {
-    // Game closed — shut down PHOBOS then exit the launcher
-    stopPhobos();
-    app.quit();
-  });
-
-  child.on('error', () => {
-    stopPhobos();
-    app.quit();
-  });
 });
 
 // ─── Game download (user-initiated) ──────────────────────────────────────────
