@@ -82,11 +82,21 @@ ipcMain.handle('game:launch', () => {
   // Keep the launcher process alive but hidden so we can watch the game
   mainWindow?.hide();
 
-  const child = spawn(activeChannel.gameExe, [], {
-    cwd:      activeChannel.gameDir,
-    detached: false,   // NOT detached — we stay as parent so we get exit events
-    stdio:    'ignore',
-  });
+  let child;
+  if (process.platform === 'darwin') {
+    // macOS: chmod the binary inside the .app bundle, then use 'open' to launch
+    // the .app directory (Gatekeeper/quarantine requires this)
+    try { fs.chmodSync(activeChannel.gameExe, 0o755); } catch {}
+    // Derive the .app path from the exe path (go up from Contents/MacOS/binary)
+    const appPath = activeChannel.gameExe.replace(/\/Contents\/MacOS\/[^/]+$/, '');
+    child = spawn('open', ['-W', appPath], {
+      cwd: activeChannel.gameDir, detached: false, stdio: 'ignore',
+    });
+  } else {
+    child = spawn(activeChannel.gameExe, [], {
+      cwd: activeChannel.gameDir, detached: false, stdio: 'ignore',
+    });
+  }
 
   child.on('exit', () => {
     // Game closed — shut down PHOBOS then exit the launcher
@@ -525,14 +535,17 @@ function fetchLocalJson(url) {
 
 function downloadFile(url, dest, onProgress) {
   return new Promise((resolve, reject) => {
-    const mod = url.startsWith('https') ? https : http;
     let lastReceived = 0;
     let lastTime     = Date.now();
+    let resolved = false;
+    const done = () => { if (!resolved) { resolved = true; resolve(); } };
+    const fail = (err) => { if (!resolved) { resolved = true; reject(err); } };
 
     const doGet = (u) => {
+      const mod = u.startsWith('https') ? https : http;
       mod.get(u, (res) => {
         if (res.statusCode === 301 || res.statusCode === 302) return doGet(res.headers.location);
-        if (res.statusCode !== 200) return reject(new Error(`HTTP ${res.statusCode}`));
+        if (res.statusCode !== 200) return fail(new Error(`HTTP ${res.statusCode}`));
 
         const total    = parseInt(res.headers['content-length'] || '0', 10);
         let received   = 0;
@@ -554,9 +567,11 @@ function downloadFile(url, dest, onProgress) {
         });
 
         res.pipe(out);
-        out.on('finish', resolve);
-        out.on('error', reject);
-      }).on('error', reject);
+        out.on('finish', done);
+        out.on('close', done);   // safety — macOS sometimes fires close but not finish
+        out.on('error', fail);
+        res.on('error', fail);
+      }).on('error', fail);
     };
 
     doGet(url);

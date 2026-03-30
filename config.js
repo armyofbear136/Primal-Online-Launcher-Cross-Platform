@@ -16,7 +16,7 @@ const CHANNELS = {
     announcementUrl: 'https://docs.google.com/document/d/e/2PACX-1vSWep4BRMEMtogWTqLCFAuWktzJz77e-2T_XYxrnte12a4rHOEtN5S-L4Js78LyiheqMWRyxC1HwKZs/pub',
     exeName: {
       win32:  'PO_Alpha_Stable.exe',
-      darwin: 'PO_Alpha_Stable',
+      darwin: 'PO_Alpha_Stable.app/Contents/MacOS/PO_Alpha_Stable',
       linux:  'PO_Alpha_Stable',
     },
     zipName: {
@@ -35,7 +35,7 @@ const CHANNELS = {
     announcementUrl: 'https://docs.google.com/document/d/e/2PACX-1vS9UGkDj5mcjoxTwaDZJZipbV_GyDMNxkFqJrgYWJOaE_BkyVIUkFydbfJrqKKtJ_IGcHom03YDKz4z/pub',
     exeName: {
       win32:  'PO_Alpha_Experimental.exe',
-      darwin: 'PO_Alpha_Experimental',
+      darwin: 'PO_Alpha_Experimental.app/Contents/MacOS/PO_Alpha_Experimental',
       linux:  'PO_Alpha_Experimental',
     },
     zipName: {
@@ -52,7 +52,32 @@ const CHANNELS = {
 exports.CHANNELS = CHANNELS;
 
 // ─── Runtime paths (channel-dependent) ───────────────────────────────────────
-const rootPath   = process.env.PORTABLE_EXECUTABLE_DIR || process.cwd();
+// On Windows/Linux, process.cwd() or PORTABLE_EXECUTABLE_DIR is the launcher's directory.
+// On macOS, process.cwd() returns '/' (read-only root) when launched from Finder/Dock.
+// Use the directory containing the .app bundle so game files live next to the launcher.
+// If running from a DMG (read-only mount), fall back to ~/Library/Application Support/.
+function resolveRootPath() {
+  if (process.env.PORTABLE_EXECUTABLE_DIR) return process.env.PORTABLE_EXECUTABLE_DIR;
+  if (process.platform === 'darwin') {
+    // process.execPath inside Electron .app: /path/to/Launcher.app/Contents/MacOS/Launcher
+    // We want the directory containing the .app bundle
+    const execDir = path.dirname(process.execPath);
+    const appDir = execDir.replace(/\.app\/Contents\/.*$/, '.app');
+    const parentDir = path.dirname(appDir);
+    // Check if the parent directory is writable (not a DMG mount)
+    try {
+      const testFile = path.join(parentDir, '.write-test-' + process.pid);
+      require('fs').writeFileSync(testFile, '');
+      require('fs').unlinkSync(testFile);
+      return parentDir;
+    } catch {
+      // Read-only (DMG mount) — use Application Support
+      return path.join(os.homedir(), 'Library', 'Application Support', 'PrimalOnlineLauncher');
+    }
+  }
+  return process.cwd();
+}
+const rootPath   = resolveRootPath();
 const platformKey = `${process.platform}-${process.arch}`;
 
 exports.ROOT_PATH = rootPath;
