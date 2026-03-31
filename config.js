@@ -16,7 +16,7 @@ const CHANNELS = {
     announcementUrl: 'https://docs.google.com/document/d/e/2PACX-1vSWep4BRMEMtogWTqLCFAuWktzJz77e-2T_XYxrnte12a4rHOEtN5S-L4Js78LyiheqMWRyxC1HwKZs/pub',
     exeName: {
       win32:  'PO_Alpha_Stable.exe',
-      darwin: 'PO_Alpha_Stable.app/Contents/MacOS/PO_Alpha_Stable',
+      darwin: 'PO_Alpha_Stable.app/Contents/MacOS/Primal Online',
       linux:  'PO_Alpha_Stable',
     },
     zipName: {
@@ -35,7 +35,7 @@ const CHANNELS = {
     announcementUrl: 'https://docs.google.com/document/d/e/2PACX-1vS9UGkDj5mcjoxTwaDZJZipbV_GyDMNxkFqJrgYWJOaE_BkyVIUkFydbfJrqKKtJ_IGcHom03YDKz4z/pub',
     exeName: {
       win32:  'PO_Alpha_Experimental.exe',
-      darwin: 'PO_Alpha_Experimental.app/Contents/MacOS/PO_Alpha_Experimental',
+      darwin: 'PO_Alpha_Experimental.app/Contents/MacOS/Primal Online',
       linux:  'PO_Alpha_Experimental',
     },
     zipName: {
@@ -59,21 +59,7 @@ exports.CHANNELS = CHANNELS;
 function resolveRootPath() {
   if (process.env.PORTABLE_EXECUTABLE_DIR) return process.env.PORTABLE_EXECUTABLE_DIR;
   if (process.platform === 'darwin') {
-    // process.execPath inside Electron .app: /path/to/Launcher.app/Contents/MacOS/Launcher
-    // We want the directory containing the .app bundle
-    const execDir = path.dirname(process.execPath);
-    const appDir = execDir.replace(/\.app\/Contents\/.*$/, '.app');
-    const parentDir = path.dirname(appDir);
-    // Check if the parent directory is writable (not a DMG mount)
-    try {
-      const testFile = path.join(parentDir, '.write-test-' + process.pid);
-      require('fs').writeFileSync(testFile, '');
-      require('fs').unlinkSync(testFile);
-      return parentDir;
-    } catch {
-      // Read-only (DMG mount) — use Application Support
-      return path.join(os.homedir(), 'Library', 'Application Support', 'PrimalOnlineLauncher');
-    }
+    return path.join(os.homedir(), 'Library', 'Application Support', 'PrimalOnlineLauncher');
   }
   return process.cwd();
 }
@@ -88,7 +74,12 @@ exports.getChannelConfig = (channelId) => {
 
   const GITHUB_BASE = `https://github.com/armyofbear136/Primal-Online-Client-Stable/releases/download/${ch.releaseTag}`;
   const zipName     = ch.zipName[platformKey] || ch.zipName['win32-x64']; // safe fallback
-  const exeName     = ch.exeName[process.platform] || ch.exeName['linux'];
+  let exeName       = ch.exeName[process.platform] || ch.exeName['linux'];
+
+  if (process.platform === 'linux') {
+    if (process.arch === 'x64') exeName += '.x86_64';
+    else if (process.arch === 'arm64') exeName += '.arm64';
+  }
 
   return {
     ...ch,

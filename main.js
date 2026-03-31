@@ -377,6 +377,7 @@ async function downloadGame() {
   });
 
   try {
+    fs.mkdirSync(path.dirname(cfg.ARCHIVE_PATH), { recursive: true });
     await downloadFile(downloadUrl, gameZip, (progress, received, total, speed, eta) => {
       send('status', {
         phase:    isUpdate ? 'download-update' : 'download-game',
