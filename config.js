@@ -16,7 +16,7 @@ const CHANNELS = {
     announcementUrl: 'https://docs.google.com/document/d/e/2PACX-1vSWep4BRMEMtogWTqLCFAuWktzJz77e-2T_XYxrnte12a4rHOEtN5S-L4Js78LyiheqMWRyxC1HwKZs/pub',
     exeName: {
       win32:  'PO_Alpha_Stable.exe',
-      darwin: 'PO_Alpha_Stable.app/Contents/MacOS/Primal Online',
+      darwin: 'Primal Online.app/Contents/MacOS/Primal Online',
       linux:  'PO_Alpha_Stable',
     },
     zipName: {
@@ -35,7 +35,7 @@ const CHANNELS = {
     announcementUrl: 'https://docs.google.com/document/d/e/2PACX-1vS9UGkDj5mcjoxTwaDZJZipbV_GyDMNxkFqJrgYWJOaE_BkyVIUkFydbfJrqKKtJ_IGcHom03YDKz4z/pub',
     exeName: {
       win32:  'PO_Alpha_Experimental.exe',
-      darwin: 'PO_Alpha_Experimental.app/Contents/MacOS/Primal Online',
+      darwin: 'Primal Online Experimental.app/Contents/MacOS/Primal Online',
       linux:  'PO_Alpha_Experimental',
     },
     zipName: {
@@ -91,7 +91,7 @@ exports.getChannelConfig = (channelId) => {
     versionFile: path.join(rootPath, `version-${channelId}.txt`),
     gameZip:     path.join(rootPath, zipName),
     gameDir,
-    gameExe:     path.join(rootPath, 'Primal Online', exeName),
+    gameExe:     path.join(gameDir, exeName),
   };
 };
 
