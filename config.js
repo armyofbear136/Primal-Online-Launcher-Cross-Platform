@@ -81,6 +81,8 @@ exports.getChannelConfig = (channelId) => {
     else if (process.arch === 'arm64') exeName += '.arm64';
   }
 
+  const gameDir = process.platform === 'darwin' ? rootPath : path.join(rootPath, 'Primal Online');
+
   return {
     ...ch,
     versionUrl:  `${GITHUB_BASE}/version.txt`,
@@ -88,7 +90,7 @@ exports.getChannelConfig = (channelId) => {
     zipName,
     versionFile: path.join(rootPath, `version-${channelId}.txt`),
     gameZip:     path.join(rootPath, zipName),
-    gameDir:     path.join(rootPath, 'Primal Online'),
+    gameDir,
     gameExe:     path.join(rootPath, 'Primal Online', exeName),
   };
 };
