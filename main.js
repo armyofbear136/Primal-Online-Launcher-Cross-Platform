@@ -40,6 +40,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  fs.mkdirSync(cfg.ROOT_PATH, { recursive: true });
   createWindow();
   app.on('activate', () => { if (!mainWindow) createWindow(); });
 });
@@ -365,8 +366,9 @@ async function downloadGame() {
   try { localVersion = fs.readFileSync(versionFile, 'utf8').trim(); } catch {}
 
   let onlineVersion = null;
-  try { onlineVersion = (await fetchText(versionUrl)).trim(); } catch (err) {
-    send('status', { phase: 'error', message: `Version check failed: ${err.message}` }); return;
+  try { onlineVersion = (await fetchText(versionUrl)).trim(); } catch {
+    // version.txt unreachable — proceed anyway; stamp with local version or a sentinel
+    onlineVersion = localVersion || 'unknown';
   }
 
   const isUpdate = localVersion !== null && fs.existsSync(gameExe);
@@ -389,8 +391,8 @@ async function downloadGame() {
     });
 
     send('status', { phase: 'extracting', message: 'Extracting…', progress: 100 });
-    const zip = new AdmZip(gameZip);
-    zip.extractAllTo(cfg.ROOT_PATH, true);
+    fs.mkdirSync(activeChannel.gameDir, { recursive: true });
+    await extractZip(gameZip, activeChannel.gameDir);
     fs.unlinkSync(gameZip);
     fs.writeFileSync(versionFile, onlineVersion, 'utf8');
     send('version', { version: onlineVersion, channel: activeChannel.label });
@@ -442,10 +444,9 @@ async function ensurePhobosLite() {
     });
   });
 
-  // Extract zip over existing install (AdmZip overwrites)
+  // Extract zip over existing install (preserves symlinks on macOS via ditto)
   send('ai-status', { phase: 'download-binary', message: 'Extracting AI module…', progress: 100 });
-  const zip = new AdmZip(zipDest);
-  zip.extractAllTo(cfg.PHOBOS_DIR, true);
+  await extractZip(zipDest, cfg.PHOBOS_DIR);
   fs.unlinkSync(zipDest);
 
   // Mark executable on Unix
@@ -554,6 +555,30 @@ function writeProviderFile(provider) {
   fs.writeFileSync(cfg.PHOBOS_PROVIDER_FILE, JSON.stringify({
     available: provider !== null, provider: provider || null, writtenAt: new Date().toISOString(),
   }, null, 2), 'utf8');
+}
+
+// ─── Zip extraction ───────────────────────────────────────────────────────────
+// AdmZip silently mangles symlinks, which breaks macOS .app bundles.
+// On darwin, delegate to `ditto` (ships with every macOS, preserves symlinks).
+// On Windows, AdmZip is fine.
+function extractZip(zipPath, destDir) {
+  return new Promise((resolve, reject) => {
+    if (process.platform === 'darwin') {
+      const { execFile } = require('child_process');
+      execFile('ditto', ['-x', '-k', zipPath, destDir], { timeout: 300000 }, (err) => {
+        if (err) reject(new Error(`ditto extraction failed: ${err.message}`));
+        else resolve();
+      });
+    } else {
+      try {
+        const AdmZip = require('adm-zip');
+        new AdmZip(zipPath).extractAllTo(destDir, true);
+        resolve();
+      } catch (err) {
+        reject(err);
+      }
+    }
+  });
 }
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
